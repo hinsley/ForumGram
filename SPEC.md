@@ -22,7 +22,7 @@
 * **Hard Constraints**
 
   * **Pure client**: MTProto via **GramJS** in browser.
-  * Security: api\_id/api\_hash are hard-coded; mitigate with rate limits/rotation if abused.
+  * Security: api\_id/api\_hash are hard-coded (`api_id = 20227969`, `api_hash = 3fc5e726fcc1160a81704958b2243109`); mitigate with rate limits/rotation if abused.
 
 ---
 
