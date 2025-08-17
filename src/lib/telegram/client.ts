@@ -3,6 +3,7 @@ import { Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { TG_API_HASH, TG_API_ID } from './constants';
 import { getStoredSessionString } from '@state/session';
+import { computeCheck } from 'telegram/Password';
 
 let cachedClient: TelegramClient | null = null;
 let connecting: Promise<TelegramClient> | null = null;
@@ -56,9 +57,9 @@ export async function signIn(phone: string, code: string, phoneCodeHash: string,
 	} catch (e: any) {
 		if (e.errorMessage === 'SESSION_PASSWORD_NEEDED' && password) {
 			const pwd = await client.invoke(new Api.account.GetPassword());
-			// @ts-expect-error checkPassword is provided by GramJS client
-			await client.checkPassword(pwd, password);
-			return true;
+			const passwordSrp = await computeCheck(pwd as any, password);
+			const auth = await client.invoke(new Api.auth.CheckPassword({ password: passwordSrp }));
+			return auth;
 		}
 		throw e;
 	}
