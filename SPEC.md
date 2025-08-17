@@ -22,7 +22,7 @@
 * **Hard Constraints**
 
   * **Pure client**: MTProto via **GramJS** in browser.
-  * Security: api\_id/api\_hash are Vercel env vars (standard for client apps); mitigate with rate limits/rotation if abused.
+  * Security: api\_id/api\_hash are hard-coded; mitigate with rate limits/rotation if abused.
 
 ---
 
@@ -84,12 +84,6 @@ workbox-window, vite-plugin-pwa, vite-plugin-node-polyfills (optional)
 zod (schema validation), date-fns, lodash-es
 ```
 
-**Env variables** (Vercel+Vite)
-
-* `VITE_TG_API_ID`
-* `VITE_TG_API_HASH`
-* `VITE_APP_NAME="ForumGram"`
-
 **Vite config notes**
 
 * Provide browser polyfills if GramJS requires Node shims (Buffer, process). Consider `vite-plugin-node-polyfills`.
@@ -131,8 +125,8 @@ import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram';
 
 export async function makeClient(sessionStr: string | null) {
-  const apiId = Number(import.meta.env.VITE_TG_API_ID);
-  const apiHash = import.meta.env.VITE_TG_API_HASH as string;
+  const apiId = ...;
+  const apiHash = ...;
   const session = new StringSession(sessionStr ?? '');
   const client = new TelegramClient(session, apiId, apiHash, {
     connectionRetries: 5,
@@ -389,7 +383,7 @@ function parseMessage(raw: string, secret?: CryptoKey) {
 
 ## 15) Build, Deploy, and Ops
 **Vercel**
-- Create project → link to GitHub repo `forumgram` → set env vars.
+- Create project → link to GitHub repo `forumgram`.
 - Domain: `forum-gram.vercel.app`.
 - Build command: `vite build`; output: `dist/`.
 
