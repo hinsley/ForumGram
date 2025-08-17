@@ -125,8 +125,8 @@ export async function sendMessageToTopic(input: Api.TypeInputPeer, topicId: numb
 	const client = await getClient();
 	const res = await client.sendMessage(input as any, {
 		message,
-		// @ts-expect-error replyToTopId is accepted by GramJS
-		replyTo: { replyToTopId: topicId },
+		replyTo: topicId,
+		topMsgId: topicId,
 	});
 	return res;
 }
