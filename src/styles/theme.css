@@ -1,0 +1,88 @@
+/* Theme variables */
+:root {
+	--bg: #0b1220;
+	--bg-elev: #0f172a;
+	--panel: #0f1b31;
+	--text: #e2e8f0;
+	--muted: #94a3b8;
+	--accent: #0ea5e9;
+	--accent-2: #22d3ee;
+	--danger: #ef4444;
+	--success: #10b981;
+	--border: #1f2a44;
+	--shadow: 0 8px 24px rgba(2, 6, 23, 0.4);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.app-shell {
+	display: grid;
+	grid-template-rows: 56px 1fr;
+	height: 100%;
+}
+.app-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 16px;
+	border-bottom: 1px solid var(--border);
+	background: linear-gradient(180deg, #0f1b31, #0b1220);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.2px; }
+.brand img { width: 24px; height: 24px; }
+
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: #0f192d; color: var(--text); cursor: pointer; box-shadow: var(--shadow); transition: transform 0.05s ease, background 0.2s ease; }
+.btn:hover { background: #13203a; }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: linear-gradient(180deg, var(--accent), var(--accent-2)); color: #071219; border-color: transparent; }
+.btn.ghost { background: transparent; box-shadow: none; }
+
+.content { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
+.sidebar { border-right: 1px solid var(--border); background: var(--bg-elev); padding: 12px; overflow: auto; }
+.main { padding: 12px; overflow: hidden; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+
+/* Lists */
+.list { display: flex; flex-direction: column; gap: 8px; }
+.list-item { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #0f1b31; cursor: pointer; }
+.list-item:hover { background: #14203a; }
+.list-item .title { font-weight: 600; }
+.list-item .sub { color: var(--muted); font-size: 12px; }
+
+/* Forms */
+.input { width: 100%; padding: 10px 12px; background: #0b1529; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.form-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.label { color: var(--muted); font-size: 12px; }
+
+/* Composer */
+.composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 8px; border-top: 1px solid var(--border); background: #0e1830; }
+.textarea { width: 100%; min-height: 68px; max-height: 240px; resize: vertical; padding: 10px 12px; background: #0b1529; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
+
+/* Message */
+.message { padding: 10px 12px; }
+.message .meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.message .body { font-size: 14px; }
+
+/* Utilities */
+.row { display: flex; gap: 10px; align-items: center; }
+.col { display: flex; flex-direction: column; gap: 10px; }
+.spacer { flex: 1 1 auto; }
+.hr { height: 1px; background: var(--border); margin: 8px 0; }
+.badge { padding: 2px 6px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); background: #112243; color: var(--text); }
+
+/* Markdown defaults */
+.md :where(h1,h2,h3,h4) { margin: 12px 0 8px; }
+.md :where(p,ul,ol) { margin: 8px 0; }
+.md code { background: #0b1529; border: 1px solid var(--border); padding: 1px 4px; border-radius: 6px; }
+.md pre { background: #0b1529; border: 1px solid var(--border); padding: 8px; border-radius: 10px; overflow: auto; }

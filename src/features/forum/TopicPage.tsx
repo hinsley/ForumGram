@@ -1,0 +1,104 @@
+import { useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getInputPeerForForumId } from '@lib/telegram/peers';
+import { getTopicHistory, sendMessageToTopic } from '@lib/telegram/client';
+import { stripTagLine, extractThreadId, appendTagLine } from '@lib/threadTags';
+import MessageList from '@components/MessageList';
+
+export default function TopicPage() {
+	const { id, topicId } = useParams();
+	const forumId = Number(id);
+	const topic = Number(topicId);
+	const qc = useQueryClient();
+	const [message, setMessage] = useState('');
+	const [thread, setThread] = useState<string | null>(null);
+	const [status, setStatus] = useState<string | null>(null);
+
+	const { data: messages = [], isLoading, error } = useQuery({
+		queryKey: ['messages', forumId, topic],
+		queryFn: async () => {
+			const input = getInputPeerForForumId(forumId);
+			const res: any = await getTopicHistory(input, topic, 0, 100);
+			// Map users for author display
+			const usersMap: Record<string, any> = {};
+			(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+			const msgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message').map((m: any) => {
+				const from = m.fromId?.userId ? usersMap[String(m.fromId.userId)] : undefined;
+				const text: string = m.message ?? '';
+				const threadId = extractThreadId(text);
+				return {
+					id: Number(m.id),
+					from: from ? (from.username ? '@' + from.username : [from.firstName, from.lastName].filter(Boolean).join(' ')) : 'unknown',
+					date: Number(m.date),
+					text: stripTagLine(text),
+					threadId,
+				};
+			});
+			return msgs as any[];
+		},
+		enabled: Number.isFinite(forumId) && Number.isFinite(topic),
+		staleTime: 10_000,
+	});
+
+	const subThreads = useMemo(() => {
+		const bucket: Record<string, number> = {};
+		for (const m of messages) {
+			if (m.threadId) bucket[m.threadId] = (bucket[m.threadId] ?? 0) + 1;
+		}
+		return Object.entries(bucket).map(([id, count]) => ({ id, count }));
+	}, [messages]);
+
+	async function onSend() {
+		try {
+			setStatus('Sending...');
+			const input = getInputPeerForForumId(forumId);
+			const withTag = thread ? appendTagLine(message, thread, 'sig_placeholder') : message;
+			await sendMessageToTopic(input, topic, withTag);
+			setMessage('');
+			setStatus('Sent');
+			setTimeout(() => setStatus(null), 1500);
+			qc.invalidateQueries({ queryKey: ['messages', forumId, topic] });
+		} catch (e: any) {
+			setStatus(e?.message ?? 'Failed');
+		}
+	}
+
+	return (
+		<div className="content">
+			<aside className="sidebar">
+				<div className="col">
+					<h4>Sub-threads</h4>
+					<div className="list">
+						<div className="list-item" onClick={() => setThread(null)}>
+							<div className="title">All messages</div>
+						</div>
+						{subThreads.map((t) => (
+							<div className="list-item" key={t.id} onClick={() => setThread(t.id)}>
+								<div className="title">{t.id}</div>
+								<div className="sub">{t.count} messages</div>
+							</div>
+						))}
+					</div>
+				</div>
+			</aside>
+			<main className="main">
+				<div className="card" style={{ height: 'calc(100% - 120px)' }}>
+					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
+						<h3>Topic {topic}</h3>
+					</div>
+					<div style={{ height: 'calc(100% - 120px)', overflow: 'hidden', padding: 0 }}>
+						{isLoading ? <div style={{ padding: 12 }}>Loading...</div> : error ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div> : (
+							<MessageList messages={messages} />
+						)}
+					</div>
+					<div className="composer">
+						<textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={thread ? `Reply in #${thread}` : 'Write a message...'} />
+						<button className="btn primary" onClick={onSend} disabled={!message.trim()}>Send</button>
+					</div>
+				</div>
+				{status && <div style={{ padding: 8, color: 'var(--muted)' }}>{status}</div>}
+			</main>
+		</div>
+	);
+}
