@@ -60,8 +60,8 @@ a:hover { text-decoration: underline; }
 .list-item .sub { color: var(--muted); font-size: 12px; }
 
 /* Gallery */
-.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.chiclet { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1b31; cursor: pointer; box-shadow: var(--shadow); }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, 240px); gap: 12px; justify-content: start; }
+.chiclet { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1b31; cursor: pointer; box-shadow: var(--shadow); width: 240px; height: 64px; overflow: hidden; }
 .chiclet:hover { background: #14203a; }
 .chiclet .title { font-weight: 700; }
 

@@ -52,7 +52,12 @@ export default function ForumPage() {
 								{(data ?? []).map((t) => (
 									<div key={t.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/topic/${t.id}`)}>
 										<div className="title">{t.iconEmoji ? `${t.iconEmoji} ` : ''}{t.title}</div>
-										<div className="sub">{t.unreadCount ? `${t.unreadCount} unread • ` : ''}{t.lastActivity ? formatTimestamp(t.lastActivity) : '—'}</div>
+										{(t.unreadCount || t.lastActivity) && (
+											<div className="sub">
+												{t.unreadCount ? `${t.unreadCount} unread${t.lastActivity ? ' • ' : ''}` : ''}
+												{t.lastActivity ? new Date(t.lastActivity).toLocaleString() : ''}
+											</div>
+										)}
 									</div>
 								))}
 							</div>
