@@ -94,7 +94,7 @@ export default function TopicPage() {
 			<main className="main">
 				<div className="card" style={{ height: 'calc(100% - 120px)' }}>
 					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
-						<h3>Topic {topic}</h3>
+						<h3>Board {topic}</h3>
 					</div>
 					<div style={{ height: 'calc(100% - 120px)', overflow: 'hidden', padding: 0 }}>
 						{isLoading ? <div style={{ padding: 12 }}>Loading...</div> : error ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div> : (
