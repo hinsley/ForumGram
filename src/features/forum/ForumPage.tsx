@@ -12,6 +12,7 @@ export default function ForumPage() {
 	const forumId = Number(id);
 	const navigate = useNavigate();
 	const initForums = useForumsStore((s) => s.initFromStorage);
+	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 
 	useEffect(() => { initForums(); }, [initForums]);
 	const { data, isLoading, error } = useQuery({
@@ -39,7 +40,7 @@ export default function ForumPage() {
 			</aside>
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
-					<h3>Forum {forumId}</h3>
+					<h3>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
 					<div className="col">
 						<h4 style={{ marginTop: 0 }}>Boards</h4>
 						{isLoading ? (

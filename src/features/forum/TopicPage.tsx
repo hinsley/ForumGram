@@ -42,6 +42,8 @@ export default function TopicPage() {
 					threadId,
 				};
 			});
+			// API returns newest-first; reverse so oldest is at top and newest at bottom
+			msgs.reverse();
 			return msgs as any[];
 		},
 		enabled: Number.isFinite(forumId) && Number.isFinite(topic),
