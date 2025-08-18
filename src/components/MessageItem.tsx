@@ -55,16 +55,16 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 				const urls: (string | undefined)[] = [];
 				for (let i = 0; i < msg.attachments.length; i++) {
 					const att = msg.attachments[i];
-					if (att && att.isMedia && (att.mimeType?.startsWith('image/'))) {
+					if (att && att.isMedia && (att.mimeType?.startsWith('image/') || att.mimeType?.startsWith('video/'))) {
 						try {
 							const sizes = (att as any)?.media?.photo?.sizes || (att as any)?.media?.document?.thumbs;
 							if (!Array.isArray(sizes) || sizes.length === 0) { urls[i] = undefined; continue; }
 							const largestIdx = sizes.length - 1;
 							const largest = sizes[largestIdx];
-							const thumbParam = largest ?? sizes.length; // prefer instance; fallback to length per request
+							const thumbParam = largest ?? sizes.length; // prefer instance; fallback per request
 							const data: any = await (client as any).downloadMedia(att.media, { thumb: thumbParam });
 							if (!data) { urls[i] = undefined; continue; }
-							const blob = data instanceof Blob ? data : new Blob([data], { type: att.mimeType || 'image/jpeg' });
+							const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
 							const url = URL.createObjectURL(blob);
 							urls[i] = url;
 							cleanups.push(() => URL.revokeObjectURL(url));
