@@ -112,7 +112,7 @@ export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, o
 
 export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
 	const client = await getClient();
-	const base = new Api.messages.GetHistory({
+	const req: any = new Api.messages.GetHistory({
 		peer: input,
 		addOffset,
 		limit,
@@ -120,7 +120,8 @@ export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number,
 		minId: 0,
 		hash: bigInt.zero as any,
 	} as any);
-	const req = ({ ...base, topMsgId: topicId } as any);
+	// Set topMsgId dynamically to scope history to the forum topic
+	req.topMsgId = topicId;
 	const res = await client.invoke(req);
 	return res;
 }
