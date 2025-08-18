@@ -114,6 +114,8 @@ export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number,
 	const client = await getClient();
 	const req: any = new Api.messages.GetHistory({
 		peer: input,
+		offsetId: 0,
+		offsetDate: 0,
 		addOffset,
 		limit,
 		maxId: 0,

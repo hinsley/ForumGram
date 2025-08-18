@@ -51,13 +51,8 @@ export default function TopicPage() {
 					}
 				} catch {}
 			}));
-			const rawAll = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
-			// Restrict to this forum topic only
-			const rawMsgs = rawAll.filter((m: any) => {
-				const reply = m.replyTo ?? m.reply_to ?? undefined;
-				const topId: number | undefined = reply?.replyToTopId ?? reply?.reply_to_top_id ?? undefined;
-				return Number(m.id) === topic || (typeof topId === 'number' && topId === topic);
-			});
+			// GetHistory with topMsgId returns the thread; no extra filtering needed
+			const rawMsgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 			const mapped = rawMsgs.map((m: any) => {
 				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
 				const fromUser = fromUserId ? usersMap[String(fromUserId)] : undefined;
