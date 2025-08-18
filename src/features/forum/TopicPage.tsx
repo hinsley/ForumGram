@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
-import { getTopicHistory, sendMessageToTopic, getClient } from '@lib/telegram/client';
+import { getTopicHistory, sendMessageToTopic, getClient, getForumTopics } from '@lib/telegram/client';
 import { stripTagLine, extractThreadId, appendTagLine } from '@lib/threadTags';
 import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
@@ -103,6 +103,28 @@ export default function TopicPage() {
 		staleTime: 10_000,
 	});
 
+	// Load topics to resolve title for current topic
+	const { data: topics = [] } = useQuery({
+		queryKey: ['topics', forumId],
+		queryFn: async () => {
+			const input = getInputPeerForForumId(forumId);
+			const res: any = await getForumTopics(input, 0, 0, 50);
+			const topics = (res.topics ?? []).map((t: any) => ({
+				id: Number(t.id),
+				title: t.title ?? 'Untitled',
+				iconEmoji: t.iconEmojiId ? String(t.iconEmojiId) : undefined,
+				unreadCount: t.unreadCount,
+				pinned: Boolean(t.pinned),
+				lastActivity: t.lastMessageDate ? t.lastMessageDate * 1000 : undefined,
+			}));
+			return topics as any[];
+		},
+		enabled: Number.isFinite(forumId),
+		staleTime: 60_000,
+	});
+
+	const topicMeta = useMemo(() => (topics as any[]).find((t: any) => t.id === topic), [topics, topic]);
+
 	const subThreads = useMemo(() => {
 		const bucket: Record<string, number> = {};
 		for (const m of messages) {
@@ -152,7 +174,7 @@ export default function TopicPage() {
 					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 						<div className="row" style={{ alignItems: 'center' }}>
 							<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
-							<h3 style={{ margin: 0 }}>Board {topic}</h3>
+							<h3 style={{ margin: 0 }}>{topicMeta ? `${topicMeta.iconEmoji ? `${topicMeta.iconEmoji} ` : ''}${topicMeta.title}` : 'Board'}</h3>
 							<div className="spacer" />
 						</div>
 					</div>
