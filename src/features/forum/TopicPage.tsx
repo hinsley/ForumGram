@@ -75,10 +75,10 @@ export default function TopicPage() {
 										fileName = a.fileName ?? a.file_name ?? fileName;
 									}
 								}
-								const sizeBytes: number | undefined = typeof doc.size === 'number' ? doc.size : (typeof doc.size === 'bigint' ? Number(doc.size) : undefined);
+								const sizeBytes: number | undefined = typeof doc.size === 'number' ? doc.size : (typeof (doc.size as any)?.toJSNumber === 'function' ? (doc.size as any).toJSNumber() : (typeof doc.size === 'bigint' ? Number(doc.size) : (doc.size != null ? Number(doc.size) : undefined)));
 								const isMedia: boolean = Boolean(mimeType && (String(mimeType).startsWith('image/') || String(mimeType).startsWith('video/') || String(mimeType).startsWith('audio/')));
 								attachments.push({
-									name: fileName ?? `document_${Number(m.id)}`,
+									name: fileName ?? '',
 									sizeBytes,
 									mimeType,
 									isMedia,
