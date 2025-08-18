@@ -7,12 +7,18 @@ export interface DisplayMessage {
 	date: number; // epoch seconds
 	text: string;
 	threadId?: string | null;
+	avatarUrl?: string;
 }
 
 export default function MessageItem({ msg, index }: { msg: DisplayMessage; index?: number }) {
 	return (
 		<div className="forum-post">
 			<div className="post-author">
+				{msg.avatarUrl ? (
+					<img className="avatar" src={msg.avatarUrl} alt="avatar" />
+				) : (
+					<div className="avatar placeholder" />
+				)}
 				<div className="author-name">{msg.from ?? 'unknown'}</div>
 				<div className="post-index">#{(index ?? 0) + 1}</div>
 			</div>

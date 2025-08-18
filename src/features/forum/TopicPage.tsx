@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
-import { getTopicHistory, sendMessageToTopic } from '@lib/telegram/client';
+import { getTopicHistory, sendMessageToTopic, getClient } from '@lib/telegram/client';
 import { stripTagLine, extractThreadId, appendTagLine } from '@lib/threadTags';
 import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
@@ -30,16 +30,29 @@ export default function TopicPage() {
 			// Map users for author display
 			const usersMap: Record<string, any> = {};
 			(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+			// Download avatars for users that have photos
+			const client = await getClient();
+			const avatarMap: Record<string, string | undefined> = {};
+			await Promise.all(Object.values(usersMap).map(async (u: any) => {
+				try {
+					if (u?.photo) {
+						const data: any = await (client as any).downloadProfilePhoto(u);
+						const blob = data instanceof Blob ? data : new Blob([data]);
+						avatarMap[String(u.id)] = URL.createObjectURL(blob);
+					}
+				} catch {}
+			}));
 			const msgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message').map((m: any) => {
-				const from = m.fromId?.userId ? usersMap[String(m.fromId.userId)] : undefined;
+				const fromUser = m.fromId?.userId ? usersMap[String(m.fromId.userId)] : undefined;
 				const text: string = applyTelegramEntitiesToMarkdown(m.message ?? '', m.entities);
 				const threadId = extractThreadId(text);
 				return {
 					id: Number(m.id),
-					from: from ? (from.username ? '@' + from.username : [from.firstName, from.lastName].filter(Boolean).join(' ')) : 'unknown',
+					from: fromUser ? (fromUser.username ? '@' + fromUser.username : [fromUser.firstName, fromUser.lastName].filter(Boolean).join(' ')) : 'unknown',
 					date: Number(m.date),
 					text: stripTagLine(text),
 					threadId,
+					avatarUrl: fromUser ? avatarMap[String(fromUser.id)] : undefined,
 				};
 			});
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
