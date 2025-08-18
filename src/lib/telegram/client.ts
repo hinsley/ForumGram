@@ -4,6 +4,7 @@ import { StringSession } from 'telegram/sessions';
 import { TG_API_HASH, TG_API_ID } from './constants';
 import { getStoredSessionString } from '@state/session';
 import { computeCheck } from 'telegram/Password';
+import bigInt from 'big-integer';
 
 let cachedClient: TelegramClient | null = null;
 let connecting: Promise<TelegramClient> | null = null;
@@ -111,12 +112,19 @@ export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, o
 
 export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
 	const client = await getClient();
-	const res = await client.invoke(new Api.messages.GetHistory({
+	const res = await client.invoke(new Api.messages.Search({
 		peer: input,
+		q: '',
+		filter: new Api.InputMessagesFilterEmpty(),
+		minDate: 0,
+		maxDate: 0,
+		offsetId: 0,
 		addOffset,
 		limit,
-		// @ts-expect-error top_msg_id works for forum topics in GramJS
+		maxId: 0,
+		minId: 0,
 		topMsgId: topicId,
+		hash: bigInt.zero,
 	}));
 	return res;
 }
