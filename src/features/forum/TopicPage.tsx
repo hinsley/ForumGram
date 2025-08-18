@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { getTopicHistory, sendMessageToTopic } from '@lib/telegram/client';
@@ -13,6 +13,7 @@ export default function TopicPage() {
 	const { id, topicId } = useParams();
 	const forumId = Number(id);
 	const topic = Number(topicId);
+	const navigate = useNavigate();
 	const qc = useQueryClient();
 	const [message, setMessage] = useState('');
 	const [thread, setThread] = useState<string | null>(null);
@@ -94,7 +95,11 @@ export default function TopicPage() {
 			<main className="main">
 				<div className="card" style={{ height: 'calc(100% - 120px)' }}>
 					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
-						<h3>Topic {topic}</h3>
+						<div className="row" style={{ alignItems: 'center' }}>
+							<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
+							<h3 style={{ margin: 0 }}>Board {topic}</h3>
+							<div className="spacer" />
+						</div>
 					</div>
 					<div style={{ height: 'calc(100% - 120px)', overflow: 'hidden', padding: 0 }}>
 						{isLoading ? <div style={{ padding: 12 }}>Loading...</div> : error ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div> : (

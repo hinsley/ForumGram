@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getForumTopics } from '@lib/telegram/client';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
-import TopicList, { TopicItem } from '@components/TopicList';
+import { TopicItem } from '@components/TopicList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 
@@ -36,15 +36,27 @@ export default function ForumPage() {
 		<div className="content">
 			<aside className="sidebar">
 				<ForumList />
-				<div className="hr" />
-				{isLoading ? <div>Loading...</div> : error ? <div style={{ color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div> : (
-					<TopicList items={data ?? []} onOpen={(topic) => navigate(`/forum/${forumId}/topic/${topic}`)} />
-				)}
 			</aside>
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
 					<h3>Forum {forumId}</h3>
-					<p>Select a topic to view messages.</p>
+					<div className="col">
+						<h4 style={{ marginTop: 0 }}>Boards</h4>
+						{isLoading ? (
+							<div>Loading...</div>
+						) : error ? (
+							<div style={{ color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div>
+						) : (
+							<div className="gallery">
+								{(data ?? []).map((t) => (
+									<div key={t.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/topic/${t.id}`)}>
+										<div className="title">{t.iconEmoji ? `${t.iconEmoji} ` : ''}{t.title}</div>
+										<div className="sub">{t.unreadCount ? `${t.unreadCount} unread • ` : ''}{t.lastActivity ? new Date(t.lastActivity).toLocaleString() : '—'}</div>
+									</div>
+								))}
+							</div>
+						)}
+					</div>
 				</div>
 			</main>
 		</div>
