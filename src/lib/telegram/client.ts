@@ -121,12 +121,13 @@ export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number,
 	return res;
 }
 
-export async function sendMessageToTopic(input: Api.TypeInputPeer, topicId: number, message: string) {
+export async function sendMessageToTopic(input: Api.TypeInputPeer, topicId: number, message: string, entities?: any[]) {
 	const client = await getClient();
-	const res = await client.sendMessage(input as any, {
+	const res = await client.sendMessage(input as any, ({
 		message,
+		entities,
 		replyTo: topicId,
 		topMsgId: topicId,
-	});
+	} as any));
 	return res;
 }

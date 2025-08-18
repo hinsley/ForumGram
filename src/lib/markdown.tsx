@@ -6,6 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { useSettingsStore } from '@state/settings';
 import 'katex/dist/katex.min.css';
+import 'highlight.js/styles/github-dark.css';
 
 interface MarkdownViewProps {
 	text: string;
@@ -28,7 +29,19 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 			],
 			span: [
 				...((defaultSchema as any).attributes?.span || []),
-				['className', 'math', 'math-inline']
+				['className', 'math', 'math-inline'],
+				// allow highlight.js token classes
+				['className', /^hljs.*$/]
+			]
+			,
+			code: [
+				...((defaultSchema as any).attributes?.code || []),
+				// allow language and hljs classes on code
+				['className', 'hljs', /^language[-_a-z0-9]+$/]
+			],
+			pre: [
+				...((defaultSchema as any).attributes?.pre || []),
+				['className', 'hljs', /^language[-_a-z0-9]+$/]
 			]
 		}
 	};
@@ -36,7 +49,29 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 	if (katexEnabled) rehypePlugins.push(rehypeKatex as any);
 	return (
 		<div className={`md ${className ?? ''}`}>
-			<ReactMarkdown rehypePlugins={rehypePlugins} remarkPlugins={[remarkGfm, remarkMath]}>
+			<ReactMarkdown
+				rehypePlugins={rehypePlugins}
+				remarkPlugins={[remarkGfm, remarkMath]}
+				components={{
+					code({ node, inline, className, children, ...props }: any) {
+						const match = /language-([\w-]+)/.exec(className || '');
+						if (inline) {
+							return (
+								<code className={className} {...props}>{children}</code>
+							);
+						}
+						const language = match?.[1] || 'text';
+						return (
+							<div className="code-block">
+								<div className="code-lang">{language}</div>
+								<pre className={className}>
+									<code className={className} {...props}>{children}</code>
+								</pre>
+							</div>
+						);
+					}
+				}}
+			>
 				{text}
 			</ReactMarkdown>
 		</div>
