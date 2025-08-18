@@ -111,11 +111,12 @@ export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, o
 
 export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
 	const client = await getClient();
-	const res = await client.invoke(new Api.messages.GetReplies({
+	const res = await client.invoke(new Api.messages.GetHistory({
 		peer: input,
-		msgId: topicId,
 		addOffset,
 		limit,
+		// @ts-expect-error top_msg_id works for forum topics in GramJS
+		topMsgId: topicId,
 	}));
 	return res;
 }
