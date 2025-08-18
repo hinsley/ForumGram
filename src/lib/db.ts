@@ -1,7 +1,7 @@
 import Dexie, { Table } from 'dexie';
 
 export interface ForumRow { id: number; accessHash?: string; username?: string; title: string; isForum: boolean; isPublic: boolean; about?: string; members?: number; lastActivity?: number; addedAt: number; }
-export interface TopicRow { id: number; forumId: number; title: string; iconEmoji?: string; lastMsgId?: number; unreadCount?: number; pinned?: boolean; }
+export interface TopicRow { id: number; forumId: number; title: string; lastMsgId?: number; unreadCount?: number; pinned?: boolean; }
 export interface MessageRow { id: number; forumId: number; topicId: number; fromId: number; date: number; textMD: string; threadTag?: string | null; threadId?: string | null; edited?: boolean; }
 export interface KvRow { key: string; value: string; }
 export interface AvatarRow { userId: number; blob: Blob; updatedAt: number; }
