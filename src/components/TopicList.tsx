@@ -19,3 +19,17 @@ export default function TopicList({ items, onOpen }: { items: TopicItem[]; onOpe
 		</div>
 	);
 }
+
+function formatTimestamp(msSinceEpoch: number): string {
+	const d = new Date(msSinceEpoch);
+	const day = d.getDate();
+	const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+	const datePart = `${day} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+	let hours = d.getHours();
+	const minutes = d.getMinutes().toString().padStart(2, '0');
+	const ampm = hours >= 12 ? 'pm' : 'am';
+	hours = hours % 12;
+	if (hours === 0) hours = 12;
+	const timePart = `${hours}:${minutes}${ampm}`;
+	return `${datePart} at ${timePart}`;
+}
