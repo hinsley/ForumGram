@@ -92,3 +92,8 @@ a:hover { text-decoration: underline; }
 .md :where(p,ul,ol) { margin: 8px 0; }
 .md code { background: #0b1529; border: 1px solid var(--border); padding: 1px 4px; border-radius: 6px; }
 .md pre { background: #0b1529; border: 1px solid var(--border); padding: 8px; border-radius: 10px; overflow: auto; }
+
+/* Code block wrapper with language header */
+.code-block { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #0b1529; }
+.code-block .code-lang { font-size: 11px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); background: #0e1830; text-transform: uppercase; letter-spacing: 0.5px; }
+.code-block pre { margin: 0; border: 0; border-radius: 0; background: transparent; }
