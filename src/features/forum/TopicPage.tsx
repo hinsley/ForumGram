@@ -167,16 +167,7 @@ export default function TopicPage() {
 				};
 			});
 			const displaySource: any[] = [...singles, ...aggregated];
-			const display = mapped.map((m: any) => ({
-				id: m.id,
-				from: m.from,
-				date: m.date,
-				text: m.text,
-				threadId: m.threadId,
-				avatarUrl: m.avatarUrl,
-				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
-				attachments: m.attachments,
-			}));
+			// Note: we intentionally use the aggregated display source below
 			// Use combined list for display
 			const displayCombined = displaySource.map((m: any) => ({
 				id: m.id,
@@ -204,6 +195,7 @@ export default function TopicPage() {
 			const res: any = await getForumTopics(input, 0, 0, 50);
 			const topics = (res.topics ?? []).map((t: any) => ({
 				id: Number(t.id),
+				topMessageId: Number(t.topMessage),
 				title: t.title ?? 'Untitled',
 				unreadCount: t.unreadCount,
 				pinned: Boolean(t.pinned),
@@ -215,7 +207,7 @@ export default function TopicPage() {
 		staleTime: 60_000,
 	});
 
-	const topicMeta = useMemo(() => (topics as any[]).find((t: any) => t.id === topic), [topics, topic]);
+	const topicMeta = useMemo(() => (topics as any[]).find((t: any) => t.topMessageId === topic), [topics, topic]);
 
 	const subThreads = useMemo(() => {
 		const bucket: Record<string, number> = {};

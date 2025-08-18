@@ -22,6 +22,7 @@ export default function ForumPage() {
 			const res: any = await getForumTopics(input, 0, 0, 50);
 			const topics: TopicItem[] = (res.topics ?? []).map((t: any) => ({
 				id: Number(t.id),
+				topMessageId: Number(t.topMessage),
 				title: t.title ?? 'Untitled',
 				unreadCount: t.unreadCount,
 				pinned: Boolean(t.pinned),
@@ -49,7 +50,7 @@ export default function ForumPage() {
 						) : (
 							<div className="gallery boards">
 								{(data ?? []).map((t) => (
-									<div key={t.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/topic/${t.id}`)}>
+									<div key={t.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/topic/${t.topMessageId}`)}>
 										<div className="title">{t.title}</div>
 										{(t.unreadCount || t.lastActivity) && (
 											<div className="sub">

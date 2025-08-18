@@ -1,4 +1,4 @@
-export interface TopicItem { id: number; title: string; unreadCount?: number; lastActivity?: number; pinned?: boolean; }
+export interface TopicItem { id: number; topMessageId: number; title: string; unreadCount?: number; lastActivity?: number; pinned?: boolean; }
 
 export default function TopicList({ items, onOpen }: { items: TopicItem[]; onOpen: (id: number) => void }) {
 	return (
