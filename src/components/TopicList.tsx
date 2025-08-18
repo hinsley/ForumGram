@@ -7,7 +7,12 @@ export default function TopicList({ items, onOpen }: { items: TopicItem[]; onOpe
 				<div className="list-item" key={t.id} onClick={() => onOpen(t.id)}>
 					<div className="col">
 						<div className="title">{t.iconEmoji ? `${t.iconEmoji} ` : ''}{t.title}</div>
-						<div className="sub">{t.unreadCount ? `${t.unreadCount} unread • ` : ''}{t.lastActivity ? new Date(t.lastActivity).toLocaleString() : '—'}</div>
+						{(t.unreadCount || t.lastActivity) && (
+							<div className="sub">
+								{t.unreadCount ? `${t.unreadCount} unread${t.lastActivity ? ' • ' : ''}` : ''}
+								{t.lastActivity ? new Date(t.lastActivity).toLocaleString() : ''}
+							</div>
+						)}
 					</div>
 				</div>
 			))}
