@@ -105,7 +105,7 @@ a:hover { text-decoration: underline; }
 .post-author .avatar { width: 96px; height: 96px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: #0b1529; }
 .post-author .avatar.placeholder { opacity: 0.3; }
 .author-name { font-weight: 700; text-align: center; }
-.post-index { color: var(--muted); font-size: 12px; }
+.author-activity { color: var(--muted); font-size: 12px; }
 .post-body { display: flex; flex-direction: column; gap: 8px; }
 .post-meta { color: var(--muted); font-size: 12px; }
 .post-content { font-size: 14px; }

@@ -8,7 +8,7 @@ import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { applyTelegramEntitiesToMarkdown, extractEntitiesFromMarkdown } from '@lib/telegram/entities';
-import { getAvatarBlob, setAvatarBlob } from '@lib/db';
+import { db, getAvatarBlob, setAvatarBlob } from '@lib/db';
 
 export default function TopicPage() {
 	const { id, topicId } = useParams();
@@ -51,8 +51,10 @@ export default function TopicPage() {
 					}
 				} catch {}
 			}));
-			const msgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message').map((m: any) => {
-				const fromUser = m.fromId?.userId ? usersMap[String(m.fromId.userId)] : undefined;
+			const rawMsgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			const mapped = rawMsgs.map((m: any) => {
+				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+				const fromUser = fromUserId ? usersMap[String(fromUserId)] : undefined;
 				const text: string = applyTelegramEntitiesToMarkdown(m.message ?? '', m.entities);
 				const threadId = extractThreadId(text);
 				return {
@@ -62,11 +64,38 @@ export default function TopicPage() {
 					text: stripTagLine(text),
 					threadId,
 					avatarUrl: fromUser ? avatarUrlMap[String(fromUser.id)] : undefined,
+					fromUserId: fromUserId,
 				};
 			});
+			// Persist to local DB for activity counting (idempotent via compound PK)
+			try {
+				await db.messages.bulkPut(mapped.map((m: any) => ({
+					id: m.id,
+					forumId,
+					topicId: topic,
+					fromId: m.fromUserId ?? 0,
+					date: m.date,
+					textMD: m.text,
+					threadId: m.threadId,
+				})));
+			} catch {}
+			// Compute activity counts for authors shown in this thread from DB
+			const uniqueUserIds = Array.from(new Set(mapped.map((m: any) => m.fromUserId).filter(Boolean))) as number[];
+			const counts = await Promise.all(uniqueUserIds.map((uid) => db.messages.where('[forumId+fromId]').equals([forumId, uid]).count()));
+			const activityMap: Record<number, number> = {};
+			uniqueUserIds.forEach((uid, i) => { activityMap[uid] = counts[i]; });
+			const display = mapped.map((m: any) => ({
+				id: m.id,
+				from: m.from,
+				date: m.date,
+				text: m.text,
+				threadId: m.threadId,
+				avatarUrl: m.avatarUrl,
+				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
+			}));
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
-			msgs.reverse();
-			return msgs as any[];
+			display.reverse();
+			return display as any[];
 		},
 		enabled: Number.isFinite(forumId) && Number.isFinite(topic),
 		staleTime: 10_000,

@@ -8,9 +8,10 @@ export interface DisplayMessage {
 	text: string;
 	threadId?: string | null;
 	avatarUrl?: string;
+	activityCount?: number;
 }
 
-export default function MessageItem({ msg, index }: { msg: DisplayMessage; index?: number }) {
+export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 	return (
 		<div className="forum-post">
 			<div className="post-author">
@@ -20,7 +21,9 @@ export default function MessageItem({ msg, index }: { msg: DisplayMessage; index
 					<div className="avatar placeholder" />
 				)}
 				<div className="author-name">{msg.from ?? 'unknown'}</div>
-				<div className="post-index">#{(index ?? 0) + 1}</div>
+				{typeof msg.activityCount === 'number' && (
+					<div className="author-activity">Activity: {msg.activityCount}</div>
+				)}
 			</div>
 			<div className="post-body">
 				<div className="post-meta">Posted {format(new Date(msg.date * 1000), 'yyyy-MM-dd HH:mm')}</div>
