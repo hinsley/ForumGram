@@ -1,5 +1,6 @@
 /* Theme variables */
-:root {
+:root,
+:root[data-theme="midnight"] {
 	--bg: #0b1220;
 	--bg-elev: #0f172a;
 	--panel: #0f1b31;
@@ -11,6 +12,51 @@
 	--success: #10b981;
 	--border: #1f2a44;
 	--shadow: 0 8px 24px rgba(2, 6, 23, 0.4);
+}
+
+/* Light */
+:root[data-theme="light"] {
+	--bg: #f8fafc;
+	--bg-elev: #ffffff;
+	--panel: #ffffff;
+	--text: #0f172a;
+	--muted: #475569;
+	--accent: #2563eb;
+	--accent-2: #60a5fa;
+	--danger: #dc2626;
+	--success: #16a34a;
+	--border: #e2e8f0;
+	--shadow: 0 8px 24px rgba(2, 6, 23, 0.08);
+}
+
+/* Monokai */
+:root[data-theme="monokai"] {
+	--bg: #272822;
+	--bg-elev: #2d2f26;
+	--panel: #32342b;
+	--text: #f8f8f2;
+	--muted: #a6e22e;
+	--accent: #66d9ef;
+	--accent-2: #a6e22e;
+	--danger: #f92672;
+	--success: #a6e22e;
+	--border: #3e4236;
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Catpuccin (Mocha-inspired) */
+:root[data-theme="catpuccin"] {
+	--bg: #1e1e2e;
+	--bg-elev: #181825;
+	--panel: #11111b;
+	--text: #cdd6f4;
+	--muted: #a6adc8;
+	--accent: #89b4fa;
+	--accent-2: #b4befe;
+	--danger: #f38ba8;
+	--success: #a6e3a1;
+	--border: #313244;
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 * { box-sizing: border-box; }

@@ -167,16 +167,6 @@ export default function TopicPage() {
 				};
 			});
 			const displaySource: any[] = [...singles, ...aggregated];
-			const display = mapped.map((m: any) => ({
-				id: m.id,
-				from: m.from,
-				date: m.date,
-				text: m.text,
-				threadId: m.threadId,
-				avatarUrl: m.avatarUrl,
-				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
-				attachments: m.attachments,
-			}));
 			// Use combined list for display
 			const displayCombined = displaySource.map((m: any) => ({
 				id: m.id,

@@ -1,7 +1,7 @@
 import { useSettingsStore } from '@state/settings';
 
 export default function SettingsPage() {
-	const { markdownEnabled, katexEnabled, forumSecret, setMarkdown, setKatex, setForumSecret } = useSettingsStore();
+	const { markdownEnabled, katexEnabled, forumSecret, theme, setMarkdown, setKatex, setForumSecret, setTheme } = useSettingsStore();
 	return (
 		<div className="content" style={{ gridTemplateColumns: '1fr' }}>
 			<main className="main">
@@ -16,6 +16,15 @@ export default function SettingsPage() {
 							<input type="checkbox" checked={katexEnabled} onChange={(e) => setKatex(e.target.checked)} />
 							<span>Enable KaTeX</span>
 						</label>
+						<div className="field">
+							<label className="label">Theme</label>
+							<select className="input" value={theme} onChange={(e) => setTheme(e.target.value as any)}>
+								<option value="midnight">Midnight</option>
+								<option value="light">Light</option>
+								<option value="monokai">Monokai</option>
+								<option value="catpuccin">Catpuccin</option>
+							</select>
+						</div>
 						<div className="field">
 							<label className="label">Forum Secret (for thread tag verification)</label>
 							<input className="input" value={forumSecret ?? ''} onChange={(e) => setForumSecret(e.target.value || null)} placeholder="Optional" />
