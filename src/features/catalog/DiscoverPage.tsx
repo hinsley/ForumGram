@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { resolveForum } from '@lib/telegram/client';
 import { useForumsStore } from '@state/forums';
 import { useNavigate } from 'react-router-dom';
+import ForumList from '@components/ForumList';
 
 export default function DiscoverPage() {
 	const [query, setQuery] = useState('');
@@ -9,7 +10,11 @@ export default function DiscoverPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const addOrUpdateForum = useForumsStore((s) => s.addOrUpdateForum);
+	const forumCount = useForumsStore((s) => Object.keys(s.forums).length);
+	const initForums = useForumsStore((s) => s.initFromStorage);
 	const navigate = useNavigate();
+
+	useEffect(() => { initForums(); }, [initForums]);
 
 	async function onResolve() {
 		try {
@@ -43,6 +48,8 @@ export default function DiscoverPage() {
 		<div className="content">
 			<aside className="sidebar">
 				<div className="col">
+					<ForumList />
+					{forumCount > 0 && <div className="hr" />}
 					<div className="field">
 						<label className="label">Forum handle or invite</label>
 						<div className="form-row">
