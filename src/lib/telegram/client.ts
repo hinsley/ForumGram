@@ -112,19 +112,42 @@ export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, o
 
 export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
 	const client = await getClient();
-	const res = await client.invoke(new Api.messages.Search({
+	// 1) Fast path: channel history scoped by topMsgId (supported by GramJS, not typed)
+	try {
+		const res: any = await client.invoke(({...new Api.messages.GetHistory({
+			peer: input,
+			addOffset,
+			limit,
+			maxId: 0,
+			minId: 0,
+			hash: bigInt.zero as any,
+		} as any), topMsgId: topicId } as any));
+		if (Array.isArray((res as any)?.messages) && (res as any).messages.length > 0) return res;
+	} catch {}
+	// 2) Scoped search within topic: reliable but may be slower on very large topics
+	try {
+		const res: any = await client.invoke(new Api.messages.Search({
+			peer: input,
+			q: ' ',
+			filter: new Api.InputMessagesFilterEmpty(),
+			minDate: 0,
+			maxDate: 0,
+			offsetId: 0,
+			addOffset,
+			limit,
+			maxId: 0,
+			minId: 0,
+			topMsgId: topicId,
+			hash: bigInt.zero,
+		}));
+		if (Array.isArray((res as any)?.messages) && (res as any).messages.length > 0) return res;
+	} catch {}
+	// 3) Fallback: replies API (functionally correct for topics)
+	const res: any = await client.invoke(new Api.messages.GetReplies({
 		peer: input,
-		q: '',
-		filter: new Api.InputMessagesFilterEmpty(),
-		minDate: 0,
-		maxDate: 0,
-		offsetId: 0,
+		msgId: topicId,
 		addOffset,
 		limit,
-		maxId: 0,
-		minId: 0,
-		topMsgId: topicId,
-		hash: bigInt.zero,
 	}));
 	return res;
 }
