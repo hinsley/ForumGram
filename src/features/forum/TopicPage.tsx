@@ -7,6 +7,7 @@ import { stripTagLine, extractThreadId, appendTagLine } from '@lib/threadTags';
 import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
+import { applyTelegramEntitiesToMarkdown, extractEntitiesFromMarkdown } from '@lib/telegram/entities';
 
 export default function TopicPage() {
 	const { id, topicId } = useParams();
@@ -30,7 +31,7 @@ export default function TopicPage() {
 			(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
 			const msgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message').map((m: any) => {
 				const from = m.fromId?.userId ? usersMap[String(m.fromId.userId)] : undefined;
-				const text: string = m.message ?? '';
+				const text: string = applyTelegramEntitiesToMarkdown(m.message ?? '', m.entities);
 				const threadId = extractThreadId(text);
 				return {
 					id: Number(m.id),
@@ -59,7 +60,8 @@ export default function TopicPage() {
 			setStatus('Sending...');
 			const input = getInputPeerForForumId(forumId);
 			const withTag = thread ? appendTagLine(message, thread, 'sig_placeholder') : message;
-			await sendMessageToTopic(input, topic, withTag);
+			const { plainText, entities } = extractEntitiesFromMarkdown(withTag);
+			await sendMessageToTopic(input, topic, plainText, entities);
 			setMessage('');
 			setStatus('Sent');
 			setTimeout(() => setStatus(null), 1500);
