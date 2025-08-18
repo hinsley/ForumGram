@@ -2,17 +2,17 @@
 	{
 		"address": "@forumgram_support",
 		"name": "ForumGram Support",
-		"description": "Get help, report issues, and suggest features for ForumGram."
+		"description": "Get help, report issues, and suggest features for ForumGram"
 	},
 	{
 		"address": "@sheafification_forum",
 		"name": "Sheafification",
-		"description": "Mathematical sciences training & mentorship community."
+		"description": "Mathematical sciences training & mentorship community"
 	},
 	{
 		"address": "@tglfs",
 		"name": "TGLFS",
-		"description": "Telegram Large File Storage forum."
+		"description": "Telegram Large File Storage forum"
 	}
 ]
 
