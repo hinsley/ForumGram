@@ -8,6 +8,7 @@ import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { applyTelegramEntitiesToMarkdown, extractEntitiesFromMarkdown } from '@lib/telegram/entities';
+import { getAvatarBlob, setAvatarBlob } from '@lib/db';
 
 export default function TopicPage() {
 	const { id, topicId } = useParams();
@@ -30,15 +31,23 @@ export default function TopicPage() {
 			// Map users for author display
 			const usersMap: Record<string, any> = {};
 			(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
-			// Download avatars for users that have photos
+			// Prepare avatar URLs from cache or network, but avoid duplicate downloads
 			const client = await getClient();
-			const avatarMap: Record<string, string | undefined> = {};
+			const avatarUrlMap: Record<string, string | undefined> = {};
 			await Promise.all(Object.values(usersMap).map(async (u: any) => {
+				const uid = Number(u.id);
 				try {
+					// Try cache first
+					const cached = await getAvatarBlob(uid);
+					if (cached) {
+						avatarUrlMap[String(uid)] = URL.createObjectURL(cached);
+						return;
+					}
 					if (u?.photo) {
 						const data: any = await (client as any).downloadProfilePhoto(u);
 						const blob = data instanceof Blob ? data : new Blob([data]);
-						avatarMap[String(u.id)] = URL.createObjectURL(blob);
+						await setAvatarBlob(uid, blob);
+						avatarUrlMap[String(uid)] = URL.createObjectURL(blob);
 					}
 				} catch {}
 			}));
@@ -52,7 +61,7 @@ export default function TopicPage() {
 					date: Number(m.date),
 					text: stripTagLine(text),
 					threadId,
-					avatarUrl: fromUser ? avatarMap[String(fromUser.id)] : undefined,
+					avatarUrl: fromUser ? avatarUrlMap[String(fromUser.id)] : undefined,
 				};
 			});
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
