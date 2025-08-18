@@ -23,7 +23,6 @@ export default function ForumPage() {
 			const topics: TopicItem[] = (res.topics ?? []).map((t: any) => ({
 				id: Number(t.id),
 				title: t.title ?? 'Untitled',
-				iconEmoji: t.iconEmojiId ? String(t.iconEmojiId) : undefined,
 				unreadCount: t.unreadCount,
 				pinned: Boolean(t.pinned),
 				lastActivity: t.lastMessageDate ? t.lastMessageDate * 1000 : undefined,
@@ -68,3 +67,4 @@ export default function ForumPage() {
 		</div>
 	);
 }
+

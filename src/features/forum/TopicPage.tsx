@@ -112,7 +112,6 @@ export default function TopicPage() {
 			const topics = (res.topics ?? []).map((t: any) => ({
 				id: Number(t.id),
 				title: t.title ?? 'Untitled',
-				iconEmoji: t.iconEmojiId ? String(t.iconEmojiId) : undefined,
 				unreadCount: t.unreadCount,
 				pinned: Boolean(t.pinned),
 				lastActivity: t.lastMessageDate ? t.lastMessageDate * 1000 : undefined,
@@ -174,7 +173,7 @@ export default function TopicPage() {
 					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 						<div className="row" style={{ alignItems: 'center' }}>
 							<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
-							<h3 style={{ margin: 0 }}>{topicMeta ? `${topicMeta.iconEmoji ? `${topicMeta.iconEmoji} ` : ''}${topicMeta.title}` : 'Board'}</h3>
+							<h3 style={{ margin: 0 }}>{topicMeta ? topicMeta.title : 'Board'}</h3>
 							<div className="spacer" />
 						</div>
 					</div>
@@ -193,3 +192,4 @@ export default function TopicPage() {
 		</div>
 	);
 }
+
