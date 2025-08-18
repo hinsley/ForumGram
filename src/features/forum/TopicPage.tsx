@@ -52,6 +52,112 @@ export default function TopicPage() {
 				} catch {}
 			}));
 			const rawMsgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			function deriveFileExtensionFromMime(mime?: string): string | undefined {
+				if (!mime || typeof mime !== 'string' || !mime.includes('/')) return undefined;
+				const subtype = mime.split('/')[1];
+				if (!subtype) return undefined;
+				if (subtype.includes('+')) return subtype.split('+').pop();
+				return subtype;
+			}
+			function extractAttachmentsFromMessage(m: any) {
+				const attachments: any[] = [];
+				const media = m?.media;
+				if (!media) return attachments;
+				const cls = media.className ?? media._ ?? '';
+				// Handle direct document
+				if (cls === 'MessageMediaDocument' || cls === 'messageMediaDocument') {
+					const doc = media.document ?? media.doc ?? undefined;
+					if (doc) {
+						const attrs = Array.isArray(doc.attributes) ? doc.attributes : [];
+						let fileName: string | undefined;
+						for (const a of attrs) {
+							const an = a?.className ?? a?._ ?? '';
+							if (an === 'DocumentAttributeFilename' || an === 'documentAttributeFilename') {
+								fileName = a.fileName ?? a.file_name ?? undefined;
+								break;
+							}
+						}
+						const mime: string | undefined = doc.mimeType ?? doc.mime_type ?? undefined;
+						const ext = fileName ? undefined : deriveFileExtensionFromMime(mime);
+						const guessedName = fileName || `file_${String(doc.id ?? m.id)}${ext ? '.' + ext : ''}`;
+						const size = Number((doc.size ?? doc.fileSize ?? 0) as number);
+						const isMedia = typeof mime === 'string' && (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/'));
+						attachments.push({
+							id: String(doc.id ?? m.id),
+							name: guessedName,
+							sizeBytes: Number.isFinite(size) ? size : 0,
+							isMedia,
+							mimeType: mime,
+							media,
+						});
+					}
+				}
+				// Handle direct photo
+				if (cls === 'MessageMediaPhoto' || cls === 'messageMediaPhoto') {
+					const photo = media.photo ?? undefined;
+					let sizeBytes = 0;
+					const sizes = photo?.sizes ?? [];
+					for (const s of sizes) {
+						if (typeof s?.size === 'number' && s.size > sizeBytes) sizeBytes = s.size;
+						const b: any = (s as any)?.bytes;
+						if (b && typeof b.length === 'number') sizeBytes = Math.max(sizeBytes, b.length);
+					}
+					attachments.push({
+						id: String(photo?.id ?? m.id),
+						name: `photo_${String(photo?.id ?? m.id)}.jpg`,
+						sizeBytes: sizeBytes || 0,
+						isMedia: true,
+						mimeType: 'image/jpeg',
+						media,
+					});
+				}
+				// Handle webpages with document or photo
+				if (cls === 'MessageMediaWebPage' || cls === 'messageMediaWebPage') {
+					const wp = media.webpage;
+					if (wp?.document) {
+						const doc = wp.document;
+						const attrs = Array.isArray(doc.attributes) ? doc.attributes : [];
+						let fileName: string | undefined;
+						for (const a of attrs) {
+							const an = a?.className ?? a?._ ?? '';
+							if (an === 'DocumentAttributeFilename' || an === 'documentAttributeFilename') {
+								fileName = a.fileName ?? a.file_name ?? undefined;
+								break;
+							}
+						}
+						const mime: string | undefined = doc.mimeType ?? doc.mime_type ?? undefined;
+						const ext = fileName ? undefined : deriveFileExtensionFromMime(mime);
+						const guessedName = fileName || `file_${String(doc.id ?? m.id)}${ext ? '.' + ext : ''}`;
+						const size = Number((doc.size ?? doc.fileSize ?? 0) as number);
+						const isMedia = typeof mime === 'string' && (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/'));
+						attachments.push({
+							id: String(doc.id ?? m.id),
+							name: guessedName,
+							sizeBytes: Number.isFinite(size) ? size : 0,
+							isMedia,
+							mimeType: mime,
+							media,
+						});
+					}
+					if (wp?.photo) {
+						const photo = wp.photo;
+						let sizeBytes = 0;
+						const sizes = photo?.sizes ?? [];
+						for (const s of sizes) {
+							if (typeof s?.size === 'number' && s.size > sizeBytes) sizeBytes = s.size;
+						}
+						attachments.push({
+							id: String(photo?.id ?? m.id),
+							name: `photo_${String(photo?.id ?? m.id)}.jpg`,
+							sizeBytes: sizeBytes || 0,
+							isMedia: true,
+							mimeType: 'image/jpeg',
+							media,
+						});
+					}
+				}
+				return attachments;
+			}
 			const mapped = rawMsgs.map((m: any) => {
 				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
 				const fromUser = fromUserId ? usersMap[String(fromUserId)] : undefined;
@@ -65,6 +171,7 @@ export default function TopicPage() {
 					threadId,
 					avatarUrl: fromUser ? avatarUrlMap[String(fromUser.id)] : undefined,
 					fromUserId: fromUserId,
+					attachments: extractAttachmentsFromMessage(m),
 				};
 			});
 			// Persist to local DB for activity counting (idempotent via compound PK)
@@ -94,6 +201,7 @@ export default function TopicPage() {
 				threadId: m.threadId,
 				avatarUrl: m.avatarUrl,
 				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
+				attachments: m.attachments,
 			}));
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
 			display.reverse();
