@@ -61,7 +61,7 @@ a:hover { text-decoration: underline; }
 
 /* Gallery */
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, 240px); gap: 12px; justify-content: start; }
-.chiclet { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1b31; cursor: pointer; box-shadow: var(--shadow); width: 240px; height: 96px; overflow: hidden; }
+.chiclet { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1b31; cursor: pointer; box-shadow: var(--shadow); width: 240px; height: 64px; overflow: hidden; }
 .chiclet:hover { background: #14203a; }
 .chiclet .title { font-weight: 700; }
 
