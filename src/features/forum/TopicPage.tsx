@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { getTopicHistory, sendMessageToTopic } from '@lib/telegram/client';
 import { stripTagLine, extractThreadId, appendTagLine } from '@lib/threadTags';
 import MessageList from '@components/MessageList';
+import ForumList from '@components/ForumList';
+import { useForumsStore } from '@state/forums';
 
 export default function TopicPage() {
 	const { id, topicId } = useParams();
@@ -14,6 +16,9 @@ export default function TopicPage() {
 	const [message, setMessage] = useState('');
 	const [thread, setThread] = useState<string | null>(null);
 	const [status, setStatus] = useState<string | null>(null);
+	const initForums = useForumsStore((s) => s.initFromStorage);
+
+	useEffect(() => { initForums(); }, [initForums]);
 
 	const { data: messages = [], isLoading, error } = useQuery({
 		queryKey: ['messages', forumId, topic],
@@ -68,6 +73,8 @@ export default function TopicPage() {
 		<div className="content">
 			<aside className="sidebar">
 				<div className="col">
+					<ForumList />
+					<div className="hr" />
 					<h4>Sub-threads</h4>
 					<div className="list">
 						<div className="list-item" onClick={() => setThread(null)}>
