@@ -60,8 +60,7 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 							const sizes = (att as any)?.media?.photo?.sizes || (att as any)?.media?.document?.thumbs;
 							if (!Array.isArray(sizes) || sizes.length === 0) { urls[i] = undefined; continue; }
 							const largestIdx = sizes.length - 1;
-							const largest = sizes[largestIdx];
-							const thumbParam = largest ?? sizes.length; // prefer instance; fallback per request
+							const thumbParam = largestIdx; // use index for largest thumb
 							const data: any = await (client as any).downloadMedia(att.media, { thumb: thumbParam });
 							if (!data) { urls[i] = undefined; continue; }
 							const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
