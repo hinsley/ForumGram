@@ -12,6 +12,10 @@ export interface DisplayMessage {
 }
 
 export default function MessageItem({ msg }: { msg: DisplayMessage }) {
+	const dateObj = new Date(msg.date * 1000);
+	const datePart = format(dateObj, 'd MMMM yyyy');
+	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
+	const postedAt = `${datePart} at ${timePart}`;
 	return (
 		<div className="forum-post">
 			<div className="post-author">
@@ -26,7 +30,7 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 				)}
 			</div>
 			<div className="post-body">
-				<div className="post-meta">Posted {format(new Date(msg.date * 1000), 'yyyy-MM-dd HH:mm')}</div>
+				<div className="post-meta">Posted {postedAt}</div>
 				<div className="post-content"><MarkdownView text={msg.text} /></div>
 			</div>
 		</div>
