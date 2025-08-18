@@ -120,7 +120,7 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 				{Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
 					<div className="post-attachments" style={{ marginTop: 8 }}>
 						<div style={{ fontWeight: 600, marginBottom: 4 }}>Attachments</div>
-						<div className="list">
+						<div className="list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
 							{msg.attachments.map((att, idx) => (
 								<div key={idx} className="list-item" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => onAttachmentClick(att)}>
 									{thumbUrls[idx] && (

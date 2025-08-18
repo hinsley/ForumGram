@@ -117,6 +117,7 @@ export default function TopicPage() {
 					avatarUrl: fromUser ? avatarUrlMap[String(fromUser.id)] : undefined,
 					fromUserId: fromUserId,
 					attachments,
+					groupedId: m.groupedId ? String(m.groupedId) : undefined,
 				};
 			});
 			// Persist to local DB for activity counting (idempotent via compound PK)
@@ -138,6 +139,34 @@ export default function TopicPage() {
 			uniqueUserIds.forEach((uid, i) => { activityMap[uid] = counts[i]; });
 			// Update cache so other views can read quickly
 			await Promise.all(uniqueUserIds.map((uid) => setActivityCount(forumId, uid, activityMap[uid] ?? 0)));
+			// Combine grouped media (albums) into a single display item
+			const groups: Record<string, any[]> = {};
+			const singles: any[] = [];
+			for (const it of mapped) {
+				if (it.groupedId) {
+					(groups[it.groupedId] ||= []).push(it);
+				} else {
+					singles.push(it);
+				}
+			}
+			const aggregated: any[] = Object.values(groups).map((items) => {
+				// sort ascending by date/id to keep order
+				items.sort((a, b) => (a.date - b.date) || (a.id - b.id));
+				const first = items[0];
+				const caption = (items.find((x) => (x.text ?? '').trim().length > 0)?.text) || '';
+				const allAttachments = items.flatMap((x) => Array.isArray(x.attachments) ? x.attachments : []);
+				return {
+					id: first.id,
+					from: first.from,
+					date: items[0].date,
+					text: caption,
+					threadId: first.threadId,
+					avatarUrl: first.avatarUrl,
+					fromUserId: first.fromUserId,
+					attachments: allAttachments,
+				};
+			});
+			const displaySource: any[] = [...singles, ...aggregated];
 			const display = mapped.map((m: any) => ({
 				id: m.id,
 				from: m.from,
@@ -148,9 +177,20 @@ export default function TopicPage() {
 				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
 				attachments: m.attachments,
 			}));
+			// Use combined list for display
+			const displayCombined = displaySource.map((m: any) => ({
+				id: m.id,
+				from: m.from,
+				date: m.date,
+				text: m.text,
+				threadId: m.threadId,
+				avatarUrl: m.avatarUrl,
+				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
+				attachments: m.attachments,
+			}));
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
-			display.reverse();
-			return display as any[];
+			displayCombined.sort((a: any, b: any) => a.date - b.date);
+			return displayCombined as any[];
 		},
 		enabled: Number.isFinite(forumId) && Number.isFinite(topic),
 		staleTime: 10_000,
