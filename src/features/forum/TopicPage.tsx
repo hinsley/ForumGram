@@ -57,6 +57,57 @@ export default function TopicPage() {
 				const fromUser = fromUserId ? usersMap[String(fromUserId)] : undefined;
 				const text: string = applyTelegramEntitiesToMarkdown(m.message ?? '', m.entities);
 				const threadId = extractThreadId(text);
+				// Extract attachments metadata
+				const attachments: any[] = [];
+				try {
+					const media: any = m.media;
+					if (media) {
+						const cls: string = media.className ?? media._ ?? '';
+						if (cls === 'MessageMediaDocument' || cls === 'messageMediaDocument') {
+							const doc: any = media.document;
+							if (doc) {
+								const mimeType: string | undefined = doc.mimeType ?? doc.mime_type ?? undefined;
+								let fileName: string | undefined;
+								const attrs: any[] = Array.isArray(doc.attributes) ? doc.attributes : [];
+								for (const a of attrs) {
+									const acls: string = a.className ?? a._ ?? '';
+									if (acls === 'DocumentAttributeFilename' || acls === 'documentAttributeFilename') {
+										fileName = a.fileName ?? a.file_name ?? fileName;
+									}
+								}
+								const sizeBytes: number | undefined = typeof doc.size === 'number' ? doc.size : (typeof doc.size === 'bigint' ? Number(doc.size) : undefined);
+								const isMedia: boolean = Boolean(mimeType && (String(mimeType).startsWith('image/') || String(mimeType).startsWith('video/') || String(mimeType).startsWith('audio/')));
+								attachments.push({
+									name: fileName ?? `document_${Number(m.id)}`,
+									sizeBytes,
+									mimeType,
+									isMedia,
+									media: media,
+								});
+							}
+						} else if (cls === 'MessageMediaPhoto' || cls === 'messageMediaPhoto') {
+							const photo: any = media.photo;
+							if (photo) {
+								let sizeBytes: number | undefined;
+								const sizes: any[] = Array.isArray(photo.sizes) ? photo.sizes : [];
+								for (const s of sizes) {
+									const sSize: number | undefined = typeof s.size === 'number' ? s.size : (typeof s.size === 'bigint' ? Number(s.size) : undefined);
+									if (typeof sSize === 'number') {
+										sizeBytes = Math.max(sizeBytes ?? 0, sSize);
+									}
+								}
+								const mimeType = 'image/jpeg';
+								attachments.push({
+									name: `photo_${Number(m.id)}.jpg`,
+									sizeBytes,
+									mimeType,
+									isMedia: true,
+									media: media,
+								});
+							}
+						}
+					}
+				} catch {}
 				return {
 					id: Number(m.id),
 					from: fromUser ? (fromUser.username ? '@' + fromUser.username : [fromUser.firstName, fromUser.lastName].filter(Boolean).join(' ')) : 'unknown',
@@ -65,6 +116,7 @@ export default function TopicPage() {
 					threadId,
 					avatarUrl: fromUser ? avatarUrlMap[String(fromUser.id)] : undefined,
 					fromUserId: fromUserId,
+					attachments,
 				};
 			});
 			// Persist to local DB for activity counting (idempotent via compound PK)
@@ -94,6 +146,7 @@ export default function TopicPage() {
 				threadId: m.threadId,
 				avatarUrl: m.avatarUrl,
 				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
+				attachments: m.attachments,
 			}));
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
 			display.reverse();
