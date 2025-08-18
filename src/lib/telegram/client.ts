@@ -112,24 +112,20 @@ export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, o
 
 export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
 	const client = await getClient();
-	let scopedPeer: Api.TypeInputPeer = input;
-	try {
-		const chId: any = (input as any)?.channelId;
-		if (chId != null) {
-			scopedPeer = new Api.InputPeerChannelFromMessage({ peer: input, msgId: topicId, channelId: chId } as any);
-		}
-	} catch {}
-	const req: any = new Api.messages.GetHistory({
-		peer: scopedPeer,
+	const res = await client.invoke(new Api.messages.Search({
+		peer: input,
+		q: ' ',
+		filter: new Api.InputMessagesFilterEmpty(),
+		minDate: 0,
+		maxDate: 0,
 		offsetId: 0,
-		offsetDate: 0,
 		addOffset,
 		limit,
 		maxId: 0,
 		minId: 0,
-		hash: bigInt.zero as any,
-	} as any);
-	const res = await client.invoke(req);
+		topMsgId: topicId,
+		hash: bigInt.zero,
+	}));
 	return res;
 }
 
