@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
-import { getTopicHistory, sendMessageToTopic } from '@lib/telegram/client';
+import { getTopicHistory, sendMessageToTopic, getClient } from '@lib/telegram/client';
 import { stripTagLine, extractThreadId, appendTagLine } from '@lib/threadTags';
 import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { applyTelegramEntitiesToMarkdown, extractEntitiesFromMarkdown } from '@lib/telegram/entities';
+import { db, getAvatarBlob, setAvatarBlob, setActivityCount } from '@lib/db';
 
 export default function TopicPage() {
 	const { id, topicId } = useParams();
@@ -30,21 +31,73 @@ export default function TopicPage() {
 			// Map users for author display
 			const usersMap: Record<string, any> = {};
 			(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
-			const msgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message').map((m: any) => {
-				const from = m.fromId?.userId ? usersMap[String(m.fromId.userId)] : undefined;
+			// Prepare avatar URLs from cache or network, but avoid duplicate downloads
+			const client = await getClient();
+			const avatarUrlMap: Record<string, string | undefined> = {};
+			await Promise.all(Object.values(usersMap).map(async (u: any) => {
+				const uid = Number(u.id);
+				try {
+					// Try cache first
+					const cached = await getAvatarBlob(uid);
+					if (cached) {
+						avatarUrlMap[String(uid)] = URL.createObjectURL(cached);
+						return;
+					}
+					if (u?.photo) {
+						const data: any = await (client as any).downloadProfilePhoto(u);
+						const blob = data instanceof Blob ? data : new Blob([data]);
+						await setAvatarBlob(uid, blob);
+						avatarUrlMap[String(uid)] = URL.createObjectURL(blob);
+					}
+				} catch {}
+			}));
+			const rawMsgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			const mapped = rawMsgs.map((m: any) => {
+				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+				const fromUser = fromUserId ? usersMap[String(fromUserId)] : undefined;
 				const text: string = applyTelegramEntitiesToMarkdown(m.message ?? '', m.entities);
 				const threadId = extractThreadId(text);
 				return {
 					id: Number(m.id),
-					from: from ? (from.username ? '@' + from.username : [from.firstName, from.lastName].filter(Boolean).join(' ')) : 'unknown',
+					from: fromUser ? (fromUser.username ? '@' + fromUser.username : [fromUser.firstName, fromUser.lastName].filter(Boolean).join(' ')) : 'unknown',
 					date: Number(m.date),
 					text: stripTagLine(text),
 					threadId,
+					avatarUrl: fromUser ? avatarUrlMap[String(fromUser.id)] : undefined,
+					fromUserId: fromUserId,
 				};
 			});
+			// Persist to local DB for activity counting (idempotent via compound PK)
+			try {
+				await db.messages.bulkPut(mapped.map((m: any) => ({
+					id: m.id,
+					forumId,
+					topicId: topic,
+					fromId: m.fromUserId ?? 0,
+					date: m.date,
+					textMD: m.text,
+					threadId: m.threadId,
+				})));
+			} catch {}
+			// Compute activity counts for authors shown in this thread from DB
+			const uniqueUserIds = Array.from(new Set(mapped.map((m: any) => m.fromUserId).filter(Boolean))) as number[];
+			const counts = await Promise.all(uniqueUserIds.map((uid) => db.messages.where('[forumId+fromId]').equals([forumId, uid]).count()));
+			const activityMap: Record<number, number> = {};
+			uniqueUserIds.forEach((uid, i) => { activityMap[uid] = counts[i]; });
+			// Update cache so other views can read quickly
+			await Promise.all(uniqueUserIds.map((uid) => setActivityCount(forumId, uid, activityMap[uid] ?? 0)));
+			const display = mapped.map((m: any) => ({
+				id: m.id,
+				from: m.from,
+				date: m.date,
+				text: m.text,
+				threadId: m.threadId,
+				avatarUrl: m.avatarUrl,
+				activityCount: m.fromUserId ? activityMap[m.fromUserId] : undefined,
+			}));
 			// API returns newest-first; reverse so oldest is at top and newest at bottom
-			msgs.reverse();
-			return msgs as any[];
+			display.reverse();
+			return display as any[];
 		},
 		enabled: Number.isFinite(forumId) && Number.isFinite(topic),
 		staleTime: 10_000,
@@ -95,7 +148,7 @@ export default function TopicPage() {
 				</div>
 			</aside>
 			<main className="main">
-				<div className="card" style={{ height: 'calc(100% - 120px)' }}>
+				<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 						<div className="row" style={{ alignItems: 'center' }}>
 							<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
@@ -103,14 +156,14 @@ export default function TopicPage() {
 							<div className="spacer" />
 						</div>
 					</div>
-					<div style={{ height: 'calc(100% - 120px)', overflow: 'hidden', padding: 0 }}>
+					<div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
 						{isLoading ? <div style={{ padding: 12 }}>Loading...</div> : error ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div> : (
 							<MessageList messages={messages} />
 						)}
 					</div>
 					<div className="composer">
-						<textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={thread ? `Reply in #${thread}` : 'Write a message...'} />
-						<button className="btn primary" onClick={onSend} disabled={!message.trim()}>Send</button>
+						<textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={thread ? `Reply in #${thread}` : 'Write a reply...'} />
+						<button className="btn primary" onClick={onSend} disabled={!message.trim()}>Post Reply</button>
 					</div>
 				</div>
 				{status && <div style={{ padding: 8, color: 'var(--muted)' }}>{status}</div>}
