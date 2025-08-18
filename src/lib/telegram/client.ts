@@ -110,16 +110,18 @@ export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, o
 	return res;
 }
 
-export async function getTopicHistory(input: Api.TypeInputPeer, _topicId: number, addOffset = 0, limit = 50) {
+export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
 	const client = await getClient();
-	const res = await client.invoke(new Api.messages.GetHistory({
+	const base = new Api.messages.GetHistory({
 		peer: input,
 		addOffset,
 		limit,
 		maxId: 0,
 		minId: 0,
 		hash: bigInt.zero as any,
-	} as any));
+	} as any);
+	const req = ({ ...base, topMsgId: topicId } as any);
+	const res = await client.invoke(req);
 	return res;
 }
 
