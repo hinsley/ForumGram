@@ -95,7 +95,7 @@ export default function TopicPage() {
 				</div>
 			</aside>
 			<main className="main">
-				<div className="card" style={{ height: 'calc(100% - 120px)' }}>
+				<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 					<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 						<div className="row" style={{ alignItems: 'center' }}>
 							<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
@@ -103,14 +103,14 @@ export default function TopicPage() {
 							<div className="spacer" />
 						</div>
 					</div>
-					<div style={{ height: 'calc(100% - 120px)', overflow: 'hidden', padding: 0 }}>
+					<div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
 						{isLoading ? <div style={{ padding: 12 }}>Loading...</div> : error ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div> : (
 							<MessageList messages={messages} />
 						)}
 					</div>
 					<div className="composer">
-						<textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={thread ? `Reply in #${thread}` : 'Write a message...'} />
-						<button className="btn primary" onClick={onSend} disabled={!message.trim()}>Send</button>
+						<textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={thread ? `Reply in #${thread}` : 'Write a reply...'} />
+						<button className="btn primary" onClick={onSend} disabled={!message.trim()}>Post Reply</button>
 					</div>
 				</div>
 				{status && <div style={{ padding: 8, color: 'var(--muted)' }}>{status}</div>}

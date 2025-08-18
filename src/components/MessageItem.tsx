@@ -9,11 +9,17 @@ export interface DisplayMessage {
 	threadId?: string | null;
 }
 
-export default function MessageItem({ msg }: { msg: DisplayMessage }) {
+export default function MessageItem({ msg, index }: { msg: DisplayMessage; index?: number }) {
 	return (
-		<div className="message">
-			<div className="meta">{msg.from ?? 'unknown'} • {format(new Date(msg.date * 1000), 'yyyy-MM-dd HH:mm')}</div>
-			<div className="body"><MarkdownView text={msg.text} /></div>
+		<div className="forum-post">
+			<div className="post-author">
+				<div className="author-name">{msg.from ?? 'unknown'}</div>
+				<div className="post-index">#{(index ?? 0) + 1}</div>
+			</div>
+			<div className="post-body">
+				<div className="post-meta">Posted {format(new Date(msg.date * 1000), 'yyyy-MM-dd HH:mm')}</div>
+				<div className="post-content"><MarkdownView text={msg.text} /></div>
+			</div>
 		</div>
 	);
 }
