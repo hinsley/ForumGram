@@ -42,8 +42,8 @@ export default function TopicPage() {
 					threadId,
 				};
 			});
-			// Ensure chronological order: oldest at top, newest at bottom
-			msgs.sort((a: any, b: any) => (a.date - b.date) || (a.id - b.id));
+			// API returns newest-first; reverse so oldest is at top and newest at bottom
+			msgs.reverse();
 			return msgs as any[];
 		},
 		enabled: Number.isFinite(forumId) && Number.isFinite(topic),
