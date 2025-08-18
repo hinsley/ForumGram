@@ -103,7 +103,7 @@ a:hover { text-decoration: underline; }
 
 /* Forum-style thread */
 .forum-thread { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
-.forum-post { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); }
+.forum-post { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); align-items: start; }
 .post-author { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: flex-start; background: #0e1830; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
 .post-author .avatar { width: 96px; height: 96px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: #0b1529; }
 .post-author .avatar.placeholder { opacity: 0.3; }
