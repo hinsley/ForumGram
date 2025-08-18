@@ -16,11 +16,26 @@ export default function ForumList() {
 			});
 	}, [forums]);
 
-	if (items.length === 0) return null;
+	if (items.length === 0) {
+		return (
+			<div className="col">
+				<div className="row" style={{ alignItems: 'center' }}>
+					<h4 style={{ margin: 0 }}>Your forums</h4>
+					<div className="spacer" />
+					<button className="btn ghost" onClick={() => navigate('/discover?add=1')} title="Add forum">+</button>
+				</div>
+				<div className="sub" style={{ color: 'var(--muted)' }}>No forums yet. Click + to add.</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="col">
-			<h4>Your forums</h4>
+			<div className="row" style={{ alignItems: 'center' }}>
+				<h4 style={{ margin: 0 }}>Your forums</h4>
+				<div className="spacer" />
+				<button className="btn ghost" onClick={() => navigate('/discover?add=1')} title="Add forum">+</button>
+			</div>
 			<div className="list">
 				{items.map((f) => (
 					<div className="list-item" key={f.id} onClick={() => navigate(`/forum/${f.id}`)}>
