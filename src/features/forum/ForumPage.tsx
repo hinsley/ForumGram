@@ -6,6 +6,7 @@ import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { TopicItem } from '@components/TopicList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
+import { format } from 'date-fns';
 
 export default function ForumPage() {
 	const { id } = useParams();
@@ -52,7 +53,7 @@ export default function ForumPage() {
 								{(data ?? []).map((t) => (
 									<div key={t.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/topic/${t.id}`)}>
 										<div className="title">{t.iconEmoji ? `${t.iconEmoji} ` : ''}{t.title}</div>
-										<div className="sub">{t.unreadCount ? `${t.unreadCount} unread • ` : ''}{t.lastActivity ? new Date(t.lastActivity).toLocaleString() : '—'}</div>
+										<div className="sub">{t.unreadCount ? `${t.unreadCount} unread • ` : ''}{t.lastActivity ? `${format(new Date(t.lastActivity), "d MMMM yyyy 'at' h:mm")}${format(new Date(t.lastActivity), 'a').toLowerCase()}` : '—'}</div>
 									</div>
 								))}
 							</div>

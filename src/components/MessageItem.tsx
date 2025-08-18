@@ -12,7 +12,7 @@ export interface DisplayMessage {
 export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 	return (
 		<div className="message">
-			<div className="meta">{msg.from ?? 'unknown'} • {format(new Date(msg.date * 1000), 'yyyy-MM-dd HH:mm')}</div>
+			<div className="meta">{msg.from ?? 'unknown'} • {(() => { const d = new Date(msg.date * 1000); return `${format(d, "d MMMM yyyy 'at' h:mm")}${format(d, 'a').toLowerCase()}`; })()}</div>
 			<div className="body"><MarkdownView text={msg.text} /></div>
 		</div>
 	);
