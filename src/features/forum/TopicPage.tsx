@@ -51,7 +51,14 @@ export default function TopicPage() {
 					}
 				} catch {}
 			}));
-			const rawMsgs = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			const rawAll = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			// Filter to only messages belonging to this forum topic: either the topic root message itself,
+			// or messages whose reply header points to this topic's top id.
+			const rawMsgs = rawAll.filter((m: any) => {
+				const reply = m.replyTo ?? m.reply_to ?? undefined;
+				const topId: number | undefined = reply?.replyToTopId ?? reply?.reply_to_top_id ?? undefined;
+				return Number(m.id) === topic || (typeof topId === 'number' && topId === topic);
+			});
 			const mapped = rawMsgs.map((m: any) => {
 				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
 				const fromUser = fromUserId ? usersMap[String(fromUserId)] : undefined;
