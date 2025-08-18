@@ -8,7 +8,7 @@ import MessageList from '@components/MessageList';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { applyTelegramEntitiesToMarkdown, extractEntitiesFromMarkdown } from '@lib/telegram/entities';
-import { db, getAvatarBlob, setAvatarBlob } from '@lib/db';
+import { db, getAvatarBlob, setAvatarBlob, setActivityCount } from '@lib/db';
 
 export default function TopicPage() {
 	const { id, topicId } = useParams();
@@ -84,6 +84,8 @@ export default function TopicPage() {
 			const counts = await Promise.all(uniqueUserIds.map((uid) => db.messages.where('[forumId+fromId]').equals([forumId, uid]).count()));
 			const activityMap: Record<number, number> = {};
 			uniqueUserIds.forEach((uid, i) => { activityMap[uid] = counts[i]; });
+			// Update cache so other views can read quickly
+			await Promise.all(uniqueUserIds.map((uid) => setActivityCount(forumId, uid, activityMap[uid] ?? 0)));
 			const display = mapped.map((m: any) => ({
 				id: m.id,
 				from: m.from,
