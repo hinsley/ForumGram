@@ -47,7 +47,7 @@ export default function ForumPage() {
 						) : error ? (
 							<div style={{ color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div>
 						) : (
-							<div className="gallery">
+							<div className="gallery boards">
 								{(data ?? []).map((t) => (
 									<div key={t.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/topic/${t.id}`)}>
 										<div className="title">{t.title}</div>
