@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
-import { getAvatarBlob, setAvatarBlob } from '@lib/db';
+import { db, getAvatarBlob, setAvatarBlob, setActivityCount } from '@lib/db';
 
 export default function BoardPage() {
     const { id, boardId, threadId } = useParams();
@@ -86,6 +86,24 @@ export default function BoardPage() {
                     userIdToUrl[uid] = undefined;
                 }
             }
+            // Persist posts to local DB for activity counting (idempotent via composite PK [forumId+topicId+id])
+            try {
+                await db.messages.bulkPut(items.map((p) => ({
+                    id: p.messageId,
+                    forumId,
+                    topicId: 0,
+                    fromId: p.fromUserId ?? 0,
+                    date: p.date ?? 0,
+                    textMD: p.content,
+                    threadId: p.parentThreadId,
+                })) as any);
+            } catch {}
+            // Compute activity counts for authors across the entire forum
+            const counts = await Promise.all(uniqueUserIds.map((uid) => db.messages.where('[forumId+fromId]').equals([forumId, uid]).count()));
+            const activityMap: Record<number, number> = {};
+            uniqueUserIds.forEach((uid, i) => { activityMap[uid] = counts[i]; });
+            // Update cache so other views can read quickly
+            await Promise.all(uniqueUserIds.map((uid) => setActivityCount(forumId, uid, activityMap[uid] ?? 0)));
             // Map to display messages
             const mapped = items.map((p) => ({
                 id: p.messageId,
@@ -94,6 +112,7 @@ export default function BoardPage() {
                 text: p.content,
                 threadId: p.parentThreadId,
                 avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
+                activityCount: p.fromUserId ? activityMap[p.fromUserId] : undefined,
                 attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],
             }));
             mapped.sort((a, b) => a.date - b.date);
