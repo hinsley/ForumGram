@@ -4,7 +4,7 @@ import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, PostCard, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash } from '@lib/protocol';
+import { ThreadMeta, PostCard, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 
@@ -13,8 +13,21 @@ export default function BoardPage() {
     const forumId = Number(id);
     const navigate = useNavigate();
     const initForums = useForumsStore((s) => s.initFromStorage);
+    const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 
     useEffect(() => { initForums(); }, [initForums]);
+
+    const { data: boardMeta } = useQuery<{ title?: string; description?: string } | null>({
+        queryKey: ['board-meta', forumId, boardId],
+        queryFn: async () => {
+            const input = getInputPeerForForumId(forumId);
+            const boards = await searchBoardCards(input, 300);
+            const found = boards.find((b) => b.id === String(boardId));
+            return found ? { title: found.title, description: found.description } : null;
+        },
+        enabled: Number.isFinite(forumId) && Boolean(boardId),
+        staleTime: 60_000,
+    });
 
     const { data: threads = [], isLoading: loadingThreads, error: threadsError, refetch: refetchThreads } = useQuery({
         queryKey: ['threads', forumId, boardId],
@@ -111,6 +124,9 @@ export default function BoardPage() {
         }
     }
 
+    const forumTitle = forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`);
+    const boardTitle = boardMeta?.title ?? String(boardId);
+
     return (
         <div className="content">
             <aside className="sidebar">
@@ -123,7 +139,11 @@ export default function BoardPage() {
                     <div className="card" style={{ padding: 12 }}>
                         <div className="row" style={{ alignItems: 'center' }}>
                             <button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
-                            <h3 style={{ margin: 0 }}>Threads</h3>
+                            <h3 style={{ margin: 0 }}>{forumTitle} &gt; {boardTitle}</h3>
+                            <div className="spacer" />
+                        </div>
+                        <div className="row" style={{ alignItems: 'center', marginTop: 8 }}>
+                            <h4 style={{ margin: 0 }}>Threads</h4>
                             <div className="spacer" />
                             <button className="btn" onClick={onCreateThread}>New Thread</button>
                         </div>
