@@ -221,8 +221,8 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 	}
 
-	// Fallback: scan recent history if search returns few/none (handles punctuation tokenization issues)
-	if (items.length === 0) {
+	// Fallback: also scan recent history to merge very fresh posts (handles indexing/tokenization delays)
+	if (items.length < queryLimit) {
 		let offsetId = 0;
 		const pageSize = Math.min(100, queryLimit);
 		let pages = 0;

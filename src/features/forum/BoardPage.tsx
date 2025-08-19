@@ -157,7 +157,8 @@ export default function BoardPage() {
             const input = getInputPeerForForumId(forumId);
             await sendPlainMessage(input, text);
             setComposerText('');
-            await refetchPosts();
+            // slight delay to let history-scan pick it up, then refetch
+            setTimeout(() => { refetchPosts(); }, 250);
         } catch (e: any) {
             alert(e?.message ?? 'Failed to send post');
         }
