@@ -5,6 +5,7 @@ import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
+import { unescapeMarkdownFromTelegram } from '@lib/markdownEscape';
 import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -94,7 +95,7 @@ export default function BoardPage() {
 				id: p.messageId,
 				from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
 				date: p.date ?? 0,
-				text: p.content,
+				text: unescapeMarkdownFromTelegram(p.content),
 				threadId: p.parentThreadId,
 				avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
 				attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],

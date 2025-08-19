@@ -1,5 +1,6 @@
 import { Api } from 'telegram';
 import { getClient } from '@lib/telegram/client';
+import { escapeMarkdownForTelegram } from '@lib/markdownEscape';
 
 export interface BoardMeta {
 	// Permanent ID (hash)
@@ -90,7 +91,7 @@ export function parseThreadCard(text: string): { id: string; parentBoardId: stri
 }
 
 export function composePostCard(id: string, parentThreadId: string, data: { content: string }): string {
-	const payload = JSON.stringify({ content: data.content });
+	const payload = JSON.stringify({ content: escapeMarkdownForTelegram(data.content) });
 	return `fg.post\n${id}\nparent:${parentThreadId}\n${payload}`;
 }
 
@@ -250,4 +251,3 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 
 	return items;
 }
-
