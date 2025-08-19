@@ -129,8 +129,8 @@ export async function searchBoardCards(input: Api.TypeInputPeer, queryLimit = 10
 		items.push({ id: parsed.id, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title, description: parsed.data.description });
 	}
 
-	// Fallback: scan recent history for fresh board cards not yet indexed by search
-	if (items.length === 0) {
+	// Fallback: scan recent history for additional board cards not yet indexed by search
+	if (items.length < queryLimit) {
 		let offsetId = 0;
 		const pageSize = Math.min(100, queryLimit);
 		let pages = 0;
@@ -173,8 +173,8 @@ export async function searchThreadCards(input: Api.TypeInputPeer, parentBoardId:
 		items.push({ id: parsed.id, parentBoardId, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title });
 	}
 
-	// Fallback: scan recent history for thread cards belonging to this board
-	if (items.length === 0) {
+	// Fallback: scan recent history for additional thread cards belonging to this board
+	if (items.length < queryLimit) {
 		let offsetId = 0;
 		const pageSize = Math.min(100, queryLimit);
 		let pages = 0;
