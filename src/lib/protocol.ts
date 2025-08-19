@@ -114,7 +114,7 @@ export function parsePostCard(text: string): { id: string; parentThreadId: strin
 
 export async function searchBoardCards(input: Api.TypeInputPeer, queryLimit = 100): Promise<BoardMeta[]> {
 	const client = await getClient();
-	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q: 'fg.metadata.board', limit: queryLimit }));
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q: 'fg.metadata.board', limit: queryLimit, filter: new Api.InputMessagesFilterEmpty() }));
 	const usersMap: Record<string, any> = {};
 	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
 	const items: BoardMeta[] = [];
@@ -131,7 +131,7 @@ export async function searchBoardCards(input: Api.TypeInputPeer, queryLimit = 10
 export async function searchThreadCards(input: Api.TypeInputPeer, parentBoardId: string, queryLimit = 200): Promise<ThreadMeta[]> {
 	const client = await getClient();
 	const q = `fg.metadata.thread ${parentBoardId}`;
-	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit }));
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit, filter: new Api.InputMessagesFilterEmpty() }));
 	const items: ThreadMeta[] = [];
 	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 	for (const m of messages) {
@@ -147,7 +147,7 @@ export async function searchThreadCards(input: Api.TypeInputPeer, parentBoardId:
 export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: string, queryLimit = 500): Promise<PostCard[]> {
 	const client = await getClient();
 	const q = `fg.post ${parentThreadId}`;
-	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit }));
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit, filter: new Api.InputMessagesFilterEmpty() }));
 	const items: PostCard[] = [];
 	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 	for (const m of messages) {
