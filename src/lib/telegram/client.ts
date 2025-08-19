@@ -98,39 +98,7 @@ export async function resolveForum(handleOrInvite: string) {
 	throw new Error('Unsupported forum identifier');
 }
 
-export async function getForumTopics(input: Api.TypeInputPeer, offsetDate = 0, offsetId = 0, limit = 50) {
-	const client = await getClient();
-	const res = await client.invoke(new Api.channels.GetForumTopics({
-		channel: input,
-		offsetDate,
-		offsetId,
-		limit,
-	}));
-	return res;
-}
-
-export async function getTopicHistory(input: Api.TypeInputPeer, topicId: number, addOffset = 0, limit = 50) {
-	const client = await getClient();
-	const res = await client.invoke(new Api.messages.GetHistory({
-		peer: input,
-		addOffset,
-		limit,
-		// @ts-expect-error top_msg_id works for forum topics in GramJS
-		topMsgId: topicId,
-	}));
-	return res;
-}
-
-export async function sendMessageToTopic(input: Api.TypeInputPeer, topicId: number, message: string, entities?: any[]) {
-	const client = await getClient();
-	const res = await client.sendMessage(input as any, ({
-		message,
-		entities,
-		replyTo: topicId,
-		topMsgId: topicId,
-	} as any));
-	return res;
-}
+// Deprecated topic-specific helpers removed (ForumGram does not use Telegram Topics)
 
 // Generic helpers for non-topic group chats
 export async function sendPlainMessage(input: Api.TypeInputPeer, message: string, entities?: any[]) {
@@ -186,43 +154,4 @@ export async function sendMultiMediaMessage(
 	return res as any;
 }
 
-export async function sendMediaMessageToTopic(
-	input: Api.TypeInputPeer,
-	topicId: number,
-	message: string,
-	media: Api.TypeInputMedia,
-	entities?: any[],
-) {
-	const client = await getClient();
-	const res = await client.invoke(new Api.messages.SendMedia({
-		peer: input,
-		media,
-		message,
-		replyTo: new Api.InputReplyToMessage({ replyToMsgId: topicId, topMsgId: topicId }) as any,
-		// @ts-expect-error supported in GramJS for forum
-		topMsgId: topicId,
-		entities,
-	} as any));
-	return res as any;
-}
-
-export async function sendMultiMediaMessageToTopic(
-	input: Api.TypeInputPeer,
-	topicId: number,
-	message: string,
-	media: Api.TypeInputMedia[],
-	entities?: any[],
-) {
-	const client = await getClient();
-	const multi: any[] = media.map((m) => new Api.InputSingleMedia({ media: m, randomId: BigInt(Date.now()) } as any));
-	const res = await client.invoke(new Api.messages.SendMultiMedia({
-		peer: input,
-		multiMedia: multi,
-		message,
-		replyTo: new Api.InputReplyToMessage({ replyToMsgId: topicId, topMsgId: topicId }) as any,
-		// @ts-expect-error supported in GramJS for forum
-		topMsgId: topicId,
-		entities,
-	} as any));
-	return res as any;
-}
+// Deprecated topic-specific media helpers removed

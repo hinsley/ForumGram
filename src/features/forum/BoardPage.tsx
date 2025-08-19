@@ -5,7 +5,8 @@ import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
-import { deleteMessages, sendPlainMessage, getClient } from '@lib/telegram/client';
+import { deleteMessages, sendPlainMessage, getClient, sendMediaMessage, sendMultiMediaMessage } from '@lib/telegram/client';
+import { prepareExistingInputMedia, prepareUploadedInputMedia, PreparedInputMedia } from '@lib/telegram/media';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
 
@@ -87,6 +88,12 @@ export default function BoardPage() {
                 }
             }
             // Map to display messages
+            // Load current user id to mark editable posts
+            let myUserId: number | undefined;
+            try {
+                const me: any = await (client as any).getMe();
+                myUserId = Number((me?.id ?? me?.user?.id) || 0) || undefined;
+            } catch {}
             const mapped = items.map((p) => ({
                 id: p.messageId,
                 from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
@@ -95,6 +102,7 @@ export default function BoardPage() {
                 threadId: p.parentThreadId,
                 avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
                 attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],
+                canEdit: myUserId && p.fromUserId ? (myUserId === p.fromUserId) : false,
             }));
             mapped.sort((a, b) => a.date - b.date);
             return mapped as any[];
@@ -149,19 +157,116 @@ export default function BoardPage() {
     }
 
     const [composerText, setComposerText] = useState('');
+    type DraftAttachment = { id: string; file?: File; status: 'idle'|'uploading'|'uploaded'|'error'; prepared?: PreparedInputMedia; fromExisting?: boolean; name?: string; mimeType?: string };
+    const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+    const [editingGroupedId, setEditingGroupedId] = useState<string | null>(null);
     async function onSendPost() {
         try {
             if (!activeThreadId) return;
-            const idHash = generateIdHash(16);
+            const idHash = isEditing && editingMessageId ? await (async () => {
+                // Reuse old id from the message being edited by parsing its text
+                const input = getInputPeerForForumId(forumId);
+                const client = await getClient();
+                const msg: any = await (client as any).getMessages(input as any, [editingMessageId]);
+                const m = Array.isArray(msg) ? msg[0] : msg;
+                const txt: string = m?.message ?? '';
+                const lines = (txt ?? '').split(/\n/);
+                // Expect 'fg.post' on first line and id on second line
+                if (lines[0] === 'fg.post' && lines[1]) return lines[1].trim();
+                return generateIdHash(16);
+            })() : generateIdHash(16);
             const text = composePostCard(idHash, activeThreadId, { content: composerText });
             const input = getInputPeerForForumId(forumId);
-            await sendPlainMessage(input, text);
+
+            // Prepare media list from draft
+            const prepared = draftAttachments.filter(a => a.prepared && a.status === 'uploaded').map(a => a.prepared!.inputMedia);
+
+            if (prepared.length === 0) {
+                await sendPlainMessage(input, text);
+            } else if (prepared.length === 1) {
+                await sendMediaMessage(input, text, prepared[0]!);
+            } else {
+                await sendMultiMediaMessage(input, text, prepared);
+            }
+
+            // If editing, delete old message(s)
+            if (isEditing && editingMessageId) {
+                const idsToDelete: number[] = [editingMessageId];
+                if (editingGroupedId) {
+                    try {
+                        const client = await getClient();
+                        // Fetch around the message and collect same groupedId
+                        const page: any = await client.invoke(new (await import('telegram')).Api.messages.GetHistory({ peer: input, addOffset: 0, limit: 50 } as any));
+                        const msgs: any[] = (page.messages ?? []).filter((mm: any) => (mm.className === 'Message' || mm._ === 'message') && String(mm.groupedId ?? mm.grouped_id ?? '') === String(editingGroupedId));
+                        idsToDelete.splice(0, idsToDelete.length, ...msgs.map((mm: any) => Number(mm.id)));
+                    } catch {}
+                }
+                await deleteMessages(input, idsToDelete);
+            }
+
             setComposerText('');
+            setDraftAttachments([]);
+            setIsEditing(false);
+            setEditingMessageId(null);
+            setEditingGroupedId(null);
             // slight delay to let history-scan pick it up, then refetch
             setTimeout(() => { refetchPosts(); }, 250);
         } catch (e: any) {
             alert(e?.message ?? 'Failed to send post');
         }
+    }
+
+    function triggerFilePick(accept?: string) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        if (accept) input.accept = accept;
+        input.multiple = true;
+        input.onchange = async () => {
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+            const client = await getClient();
+            for (const file of files) {
+                const id = generateIdHash(8);
+                setDraftAttachments(prev => [...prev, { id, file, status: 'uploading', name: file.name, mimeType: file.type }]);
+                try {
+                    // @ts-ignore
+                    const uploaded = await (client as any).uploadFile({ file, workers: 1 });
+                    const prepared = await prepareUploadedInputMedia(uploaded, file);
+                    setDraftAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'uploaded', prepared } : a));
+                } catch {
+                    setDraftAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error' } : a));
+                }
+            }
+        };
+        input.click();
+    }
+
+    async function onEditPost(msg: any) {
+        try {
+            setIsEditing(true);
+            setEditingMessageId(msg.id);
+            setComposerText(msg.text);
+            // Build existing attachments for reuse
+            const existing: DraftAttachment[] = [];
+            if (Array.isArray(msg.attachments)) {
+                for (const att of msg.attachments) {
+                    const prep = await prepareExistingInputMedia(att.media);
+                    if (prep) existing.push({ id: generateIdHash(8), status: 'uploaded', prepared: prep, fromExisting: true, name: att.name, mimeType: att.mimeType });
+                }
+            }
+            setDraftAttachments(existing);
+            // Track grouped id for full delete if needed
+            const rawGrouped = (posts as any[]).find((p: any) => p.id === msg.id)?.groupedId;
+            setEditingGroupedId(rawGrouped ?? null);
+        } catch (e: any) {
+            alert(e?.message ?? 'Failed to enter edit mode');
+        }
+    }
+
+    function removeDraftAttachment(id: string) {
+        setDraftAttachments(prev => prev.filter(a => a.id !== id));
     }
 
     const forumTitle = forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`);
@@ -216,12 +321,45 @@ export default function BoardPage() {
                         </div>
                         <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
                             {loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-                                <MessageList messages={posts as any[]} />
+                                <MessageList messages={posts as any[]} onEdit={onEditPost} />
                             )}
                         </div>
                         <div className="composer">
-                            <textarea className="textarea" value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder={'Write a post...'} />
-                            <button className="btn primary" onClick={onSendPost} disabled={!composerText.trim() || !activeThreadId}>Post</button>
+                            <div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <button className="btn" title="Attach files" onClick={() => triggerFilePick()}>
+                                    📎
+                                </button>
+                                <button className="btn" title="Attach images/videos" onClick={() => triggerFilePick('image/*,video/*')}>
+                                    🖼️
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <textarea className="textarea" value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder={isEditing ? 'Edit your post...' : 'Write a post...'} />
+                                {draftAttachments.length > 0 && (
+                                    <div style={{ padding: 8, background: '#0b1529', border: '1px solid var(--border)', borderRadius: 8 }}>
+                                        <div style={{ fontWeight: 600, marginBottom: 6 }}>Attachments</div>
+                                        <div style={{ display: 'grid', gap: 6 }}>
+                                            {draftAttachments.map(att => (
+                                                <div key={att.id} className="row" style={{ alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <div style={{ width: 8, height: 8, borderRadius: 4, background: att.status === 'uploaded' ? 'var(--success)' : att.status === 'uploading' ? 'var(--muted)' : att.status === 'error' ? 'var(--danger)' : 'var(--muted)' }} />
+                                                        <div>{att.name || 'attachment'}</div>
+                                                        <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                                                            {att.status === 'uploading' ? 'Uploading…' : att.status === 'uploaded' ? 'Ready' : att.status === 'error' ? 'Failed' : ''}
+                                                        </div>
+                                                    </div>
+                                                    <button className="btn ghost" onClick={() => removeDraftAttachment(att.id)}>Remove</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="col" style={{ display: 'flex', alignItems: 'flex-start' }}>
+                                <button className="btn primary" onClick={onSendPost} disabled={!composerText.trim() || !activeThreadId}>
+                                    {isEditing ? 'Save' : 'Post'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
