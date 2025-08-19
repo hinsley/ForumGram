@@ -68,6 +68,23 @@ export default function BoardPage() {
         }
     }
 
+    async function onEditThread(t: ThreadMeta) {
+        try {
+            const newTitle = prompt('New thread title?', t.title)?.trim();
+            if (!newTitle) return;
+            const input = getInputPeerForForumId(forumId);
+            const newText = composeThreadCard(t.id, String(boardId), { title: newTitle });
+            const sent: any = await sendPlainMessage(input, newText);
+            const newMsgId: number = Number(sent?.id ?? sent?.message?.id ?? 0);
+            if (newMsgId) {
+                await deleteMessages(input, [t.messageId]);
+            }
+            await refetchThreads();
+        } catch (e: any) {
+            alert(e?.message ?? 'Failed to edit thread');
+        }
+    }
+
     async function onDeleteThread(t: ThreadMeta) {
         try {
             if (!confirm(`Delete thread "${t.title}"? Posts will remain as zombie messages.`)) return;
@@ -120,6 +137,7 @@ export default function BoardPage() {
                                     <div key={t.id} className="chiclet" onClick={() => setSelectedThreadId(t.id)}>
                                         <div className="title">{t.title}</div>
                                         <div className="row" style={{ gap: 8, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+                                            <button className="btn ghost" onClick={() => onEditThread(t)}>Edit</button>
                                             <button className="btn ghost" onClick={() => onDeleteThread(t)}>Delete</button>
                                         </div>
                                     </div>
