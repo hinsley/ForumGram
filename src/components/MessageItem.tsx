@@ -21,6 +21,7 @@ export interface DisplayMessage {
 	activityCount?: number;
 	attachments?: AttachmentMeta[];
 	canEdit?: boolean;
+	canDelete?: boolean;
 }
 
 export default function MessageItem({ msg, onEdit, onDelete }: { msg: DisplayMessage; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void }) {
@@ -120,7 +121,7 @@ export default function MessageItem({ msg, onEdit, onDelete }: { msg: DisplayMes
 					<div>Posted {postedAt}</div>
 					<div style={{ display: 'flex', gap: 8 }}>
 						{msg.canEdit ? <button className="btn ghost" onClick={() => onEdit && onEdit(msg)}>Edit</button> : null}
-						{msg.canEdit ? <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={() => onDelete && onDelete(msg)}>Delete</button> : null}
+						{msg.canDelete ? <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={() => onDelete && onDelete(msg)}>Delete</button> : null}
 					</div>
 				</div>
 				<div className="post-content"><MarkdownView text={msg.text} /></div>
