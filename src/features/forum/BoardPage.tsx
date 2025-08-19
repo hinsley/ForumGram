@@ -94,8 +94,6 @@ export default function BoardPage() {
                 const me: any = await (client as any).getMe();
                 myUserId = Number((me?.id ?? me?.user?.id) || 0) || undefined;
             } catch {}
-            const EDIT_WINDOW_SECONDS = 48 * 60 * 60;
-            const nowSec = Math.floor(Date.now() / 1000);
             const mapped = items.map((p) => ({
                 id: p.messageId,
                 from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
@@ -105,7 +103,7 @@ export default function BoardPage() {
                 avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
                 attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],
                 groupedId: p.groupedId,
-                canEdit: myUserId && p.fromUserId ? ((myUserId === p.fromUserId) && (typeof p.date === 'number' ? (nowSec - p.date) <= EDIT_WINDOW_SECONDS : false)) : false,
+                canEdit: myUserId && p.fromUserId ? (myUserId === p.fromUserId) : false,
                 canDelete: myUserId && p.fromUserId ? (myUserId === p.fromUserId) : false,
             }));
             mapped.sort((a, b) => a.date - b.date);
@@ -180,7 +178,18 @@ export default function BoardPage() {
                     const lines = (txt ?? '').split(/\n/);
                     return (lines[0] === 'fg.post' && lines[1]) ? lines[1].trim() : generateIdHash(16);
                 })()), activeThreadId, { content: composerText });
-                await editMessage(input, editingMessageId, newText);
+                try {
+                    await editMessage(input, editingMessageId, newText);
+                } catch (e: any) {
+                    const msg: string = String(e?.message || e?.errorMessage || 'Failed to edit');
+                    if (msg.toUpperCase().includes('MESSAGE_EDIT_TIME_EXPIRED')) {
+                        alert('This post can no longer be edited (Telegram edit window expired).');
+                        setIsEditing(false);
+                        setEditingMessageId(null);
+                        return;
+                    }
+                    throw e;
+                }
             } else {
                 const idHash = generateIdHash(16);
                 const text = composePostCard(idHash, activeThreadId, { content: composerText });
