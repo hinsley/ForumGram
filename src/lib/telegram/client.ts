@@ -141,11 +141,12 @@ export async function sendMultiMediaMessage(
 	entities?: any[],
 ) {
 	const client = await getClient();
-	const multi: any[] = media.map((m) => new Api.InputSingleMedia({ media: m, randomId: BigInt(Date.now()) } as any));
-	// Attach message as caption to the first item for best compatibility
+	const now = Date.now();
+	const multi: any[] = media.map((m, idx) => new Api.InputSingleMedia({ media: m, randomId: BigInt(now + idx), message: '', entities: [] } as any));
+	// Attach caption to the first item; others must still have a string per TL schema
 	if (multi.length > 0) {
-		(multi[0] as any).message = message;
-		(multi[0] as any).entities = entities;
+		(multi[0] as any).message = message ?? '';
+		(multi[0] as any).entities = entities ?? [];
 	}
 	const res = await client.invoke(new Api.messages.SendMultiMedia({
 		peer: input,
