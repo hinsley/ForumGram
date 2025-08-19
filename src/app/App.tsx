@@ -48,6 +48,7 @@ export default function App() {
 				<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
 				<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
 				<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+				<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
 				<Route path="/backup" element={<RequireAuth><BackupPage /></RequireAuth>} />
 				<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
 				<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />

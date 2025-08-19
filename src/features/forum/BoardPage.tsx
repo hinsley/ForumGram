@@ -10,7 +10,7 @@ import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
 
 export default function BoardPage() {
-    const { id, boardId } = useParams();
+    const { id, boardId, threadId } = useParams();
     const forumId = Number(id);
     const navigate = useNavigate();
     const initForums = useForumsStore((s) => s.initFromStorage);
@@ -42,8 +42,8 @@ export default function BoardPage() {
         staleTime: 10_000,
     });
 
-    const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-    const activeThreadId = selectedThreadId; // do not auto-select any thread
+    const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
+    const activeThreadId = selectedThreadId; // controlled via URL param as well
     const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 
     const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
@@ -194,7 +194,7 @@ export default function BoardPage() {
                         ) : (
                             <div className="gallery boards" style={{ marginTop: 12 }}>
                                 {threads.map((t) => (
-                                    <div key={t.id} className="chiclet" onClick={() => setSelectedThreadId(t.id)}>
+                                    <div key={t.id} className="chiclet" onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}`); }}>
                                         <div className="title">{t.title}</div>
                                         <div className="row" style={{ gap: 8, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
                                             <button className="btn ghost" onClick={() => onEditThread(t)}>Edit</button>
@@ -209,7 +209,7 @@ export default function BoardPage() {
                     <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
                             <div className="row" style={{ alignItems: 'center' }}>
-                                <button className="btn ghost" onClick={() => setSelectedThreadId(null)}>Back</button>
+                                <button className="btn ghost" onClick={() => { setSelectedThreadId(null); navigate(`/forum/${forumId}/board/${boardId}`); }}>Back</button>
                                 <h3 style={{ margin: 0 }}>{activeThread ? activeThread.title : 'Thread'}</h3>
                                 <div className="spacer" />
                             </div>
