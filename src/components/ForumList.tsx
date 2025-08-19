@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useForumsStore } from '@state/forums';
 
 export default function ForumList() {
 	const forums = useForumsStore((s) => s.forums);
 	const removeForum = useForumsStore((s) => s.removeForum);
 	const navigate = useNavigate();
+	const location = useLocation();
 	const [openMenuForId, setOpenMenuForId] = useState<number | null>(null);
 
 	const items = useMemo(() => {
@@ -68,6 +69,9 @@ export default function ForumList() {
 												if (!ok) return;
 												removeForum(f.id);
 												setOpenMenuForId(null);
+												if (location.pathname.startsWith(`/forum/${f.id}`)) {
+													navigate('/');
+												}
 											}}
 										>
 											Leave forum
