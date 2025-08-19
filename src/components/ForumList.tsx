@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForumsStore } from '@state/forums';
 
 export default function ForumList() {
 	const forums = useForumsStore((s) => s.forums);
+	const removeForum = useForumsStore((s) => s.removeForum);
 	const navigate = useNavigate();
+\n+	const [openMenuForId, setOpenMenuForId] = useState<number | null>(null);
 
 	const items = useMemo(() => {
 		return Object.values(forums)
@@ -38,11 +40,42 @@ export default function ForumList() {
 			</div>
 			<div className="list">
 				{items.map((f) => (
-					<div className="list-item" key={f.id} onClick={() => navigate(`/forum/${f.id}`)}>
+					<div className="list-item" key={f.id} onClick={() => navigate(`/forum/${f.id}`)} style={{ position: 'relative' }}>
 						<div className="col">
 							<div className="title">{f.title ?? (f.username ? `@${f.username}` : `Forum ${f.id}`)}</div>
 							<div className="sub">{f.isPublic ? 'Public' : 'Private'}{f.username ? ` • @${f.username}` : ''}</div>
 						</div>
+						<div className="spacer" />
+						<button
+							className="btn ghost"
+							onClick={(e) => { e.stopPropagation(); setOpenMenuForId(openMenuForId === f.id ? null : f.id); }}
+							title="More"
+						>
+							⋯
+						</button>
+						{openMenuForId === f.id && (
+							<div
+								onClick={(e) => e.stopPropagation()}
+								style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}
+							>
+								<div className="card" style={{ padding: 8, minWidth: 180 }}>
+									<div className="col" style={{ gap: 6 }}>
+										<button
+											className="btn"
+											style={{ background: 'transparent', color: 'var(--danger)' }}
+											onClick={() => {
+												const ok = confirm('Leave this forum? Your content will NOT be deleted from the forum.');
+												if (!ok) return;
+												removeForum(f.id);
+												setOpenMenuForId(null);
+											}}
+										>
+											Leave forum
+										</button>
+									</div>
+								</div>
+							</div>
+						)}
 					</div>
 				))}
 			</div>
