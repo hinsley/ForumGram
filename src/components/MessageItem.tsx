@@ -22,8 +22,8 @@ export interface DisplayMessage {
 	attachments?: AttachmentMeta[];
 	canEdit?: boolean;
 	canDelete?: boolean;
-  cardId? string;
-  authorUserId?: number;
+    cardId?: string;
+    authorUserId?: number;
 }
         
 export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete }: { msg: DisplayMessage; canEdit?: boolean; canDelete?: boolean; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void; }) {
