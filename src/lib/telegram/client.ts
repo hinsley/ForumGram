@@ -131,3 +131,21 @@ export async function sendMessageToTopic(input: Api.TypeInputPeer, topicId: numb
 	} as any));
 	return res;
 }
+
+// Generic helpers for non-topic group chats
+export async function sendPlainMessage(input: Api.TypeInputPeer, message: string, entities?: any[]) {
+	const client = await getClient();
+	const res = await client.sendMessage(input as any, ({ message, entities } as any));
+	return res;
+}
+
+export async function deleteMessages(input: Api.TypeInputPeer, messageIds: number[]) {
+	const client = await getClient();
+	await (client as any).deleteMessages(input as any, messageIds, { revoke: true });
+}
+
+export async function editMessage(input: Api.TypeInputPeer, messageId: number, message: string, entities?: any[]) {
+	const client = await getClient();
+	const res = await client.invoke(new Api.messages.EditMessage({ peer: input, id: messageId, message, entities } as any));
+	return res;
+}

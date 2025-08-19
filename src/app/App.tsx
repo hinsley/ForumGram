@@ -2,10 +2,10 @@ import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-ro
 import LoginPage from '@features/auth/LoginPage';
 import DiscoverPage from '@features/catalog/DiscoverPage';
 import ForumPage from '@features/forum/ForumPage';
-import TopicPage from '@features/forum/TopicPage';
 import BackupPage from '@features/backup/BackupPage';
 import SettingsPage from '@features/settings/SettingsPage';
 import { useSessionStore } from '@state/session';
+import BoardPage from '@features/forum/BoardPage';
 
 function Header() {
 	const navigate = useNavigate();
@@ -47,7 +47,8 @@ export default function App() {
 				<Route path="/login" element={<LoginPage />} />
 				<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
 				<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
-				<Route path="/forum/:id/topic/:topicId" element={<RequireAuth><TopicPage /></RequireAuth>} />
+				<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+				<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
 				<Route path="/backup" element={<RequireAuth><BackupPage /></RequireAuth>} />
 				<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
 				<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />

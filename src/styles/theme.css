@@ -65,9 +65,6 @@ a:hover { text-decoration: underline; }
 .chiclet:hover { background: #14203a; }
 .chiclet .title { font-weight: 700; }
 
-/* Forum boards use fixed-height chiclets as an exception to the default */
-.gallery.boards .chiclet { height: 64px; overflow: hidden; }
-
 /* Forms */
 .input { width: 100%; padding: 10px 12px; background: #0b1529; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
 .field { display: flex; flex-direction: column; gap: 6px; }
