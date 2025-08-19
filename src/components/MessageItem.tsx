@@ -23,7 +23,7 @@ export interface DisplayMessage {
 	canEdit?: boolean;
 }
 
-export default function MessageItem({ msg, onEdit }: { msg: DisplayMessage; onEdit?: (msg: DisplayMessage) => void }) {
+export default function MessageItem({ msg, onEdit, onDelete }: { msg: DisplayMessage; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void }) {
 	const dateObj = new Date(msg.date * 1000);
 	const datePart = format(dateObj, 'd MMMM yyyy');
 	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
@@ -118,7 +118,10 @@ export default function MessageItem({ msg, onEdit }: { msg: DisplayMessage; onEd
 			<div className="post-body">
 				<div className="post-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
 					<div>Posted {postedAt}</div>
-					{msg.canEdit ? <button className="btn ghost" onClick={() => onEdit && onEdit(msg)}>Edit</button> : null}
+					<div style={{ display: 'flex', gap: 8 }}>
+						{msg.canEdit ? <button className="btn ghost" onClick={() => onEdit && onEdit(msg)}>Edit</button> : null}
+						{msg.canEdit ? <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={() => onDelete && onDelete(msg)}>Delete</button> : null}
+					</div>
 				</div>
 				<div className="post-content"><MarkdownView text={msg.text} /></div>
 				{Array.isArray(msg.attachments) && msg.attachments.length > 0 && (

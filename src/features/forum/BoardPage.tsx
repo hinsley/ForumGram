@@ -325,7 +325,28 @@ export default function BoardPage() {
                         </div>
                         <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
                             {loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-                                <MessageList messages={posts as any[]} onEdit={onEditPost} />
+                                <MessageList messages={posts as any[]} onEdit={onEditPost} onDelete={async (msg) => {
+                                    try {
+                                        if (!confirm('Delete this post?')) return;
+                                        const input = getInputPeerForForumId(forumId);
+                                        // If this was part of an album, try to delete all with same groupedId
+                                        const found: any = (posts as any[]).find((p: any) => p.id === msg.id);
+                                        const groupedId = found?.groupedId;
+                                        const ids: number[] = [msg.id];
+                                        if (groupedId) {
+                                            try {
+                                                const client = await getClient();
+                                                const page: any = await client.invoke(new (await import('telegram')).Api.messages.GetHistory({ peer: input, addOffset: 0, limit: 100 } as any));
+                                                const msgs: any[] = (page.messages ?? []).filter((mm: any) => (mm.className === 'Message' || mm._ === 'message') && String(mm.groupedId ?? mm.grouped_id ?? '') === String(groupedId));
+                                                ids.splice(0, ids.length, ...msgs.map((mm: any) => Number(mm.id)));
+                                            } catch {}
+                                        }
+                                        await deleteMessages(input, ids);
+                                        setTimeout(() => { refetchPosts(); }, 250);
+                                    } catch (e: any) {
+                                        alert(e?.message ?? 'Failed to delete post');
+                                    }
+                                }} />
                             )}
                         </div>
                         <div className="composer">
