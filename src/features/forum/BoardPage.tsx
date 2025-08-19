@@ -88,11 +88,17 @@ export default function BoardPage() {
                 }
             }
             // Map to display messages
-            // Load current user id to mark editable posts
+            // Load current user id to mark editable/deleteable posts
             let myUserId: number | undefined;
             try {
                 const me: any = await (client as any).getMe();
-                myUserId = Number((me?.id ?? me?.user?.id) || 0) || undefined;
+                const raw = (me && (me.id ?? me.user?.id));
+                if (typeof raw === 'number') myUserId = raw;
+                else if (typeof raw === 'bigint') myUserId = Number(raw);
+                else if (raw && typeof raw.toNumber === 'function') myUserId = raw.toNumber();
+                else if (raw && typeof raw.toJSNumber === 'function') myUserId = raw.toJSNumber();
+                else if (raw && typeof raw.value === 'number') myUserId = raw.value;
+                else if (raw && typeof raw === 'string') myUserId = Number(raw);
             } catch {}
             const mapped = items.map((p) => ({
                 id: p.messageId,
