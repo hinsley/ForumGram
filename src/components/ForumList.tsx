@@ -20,7 +20,7 @@ export default function ForumList() {
 		return (
 			<div className="col">
 				<div className="row" style={{ alignItems: 'center' }}>
-					<h4 style={{ margin: 0 }}>Your forums</h4>
+					<h4 style={{ margin: 0 }}>Forums</h4>
 					<div className="spacer" />
 					<button className="btn ghost" onClick={() => navigate('/discover?add=1')} title="Add forum">+</button>
 				</div>
@@ -32,7 +32,7 @@ export default function ForumList() {
 	return (
 		<div className="col">
 			<div className="row" style={{ alignItems: 'center' }}>
-				<h4 style={{ margin: 0 }}>Your forums</h4>
+				<h4 style={{ margin: 0 }}>Forums</h4>
 				<div className="spacer" />
 				<button className="btn ghost" onClick={() => navigate('/discover?add=1')} title="Add forum">+</button>
 			</div>
