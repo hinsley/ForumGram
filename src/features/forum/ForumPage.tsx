@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
@@ -13,6 +13,7 @@ export default function ForumPage() {
 	const navigate = useNavigate();
 	const initForums = useForumsStore((s) => s.initFromStorage);
 	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
+	const [openMenuForBoardId, setOpenMenuForBoardId] = useState<string | null>(null);
 
 	useEffect(() => { initForums(); }, [initForums]);
 	const { data, isLoading, error, refetch } = useQuery({
@@ -94,14 +95,23 @@ export default function ForumPage() {
 						) : (
 							<div className="gallery boards">
 								{(data ?? []).map((b) => (
-									<div key={b.id} className="chiclet" onClick={() => navigate(`/forum/${forumId}/board/${b.id}`)}>
+									<div key={b.id} className="chiclet" style={{ position: 'relative' }} onClick={() => navigate(`/forum/${forumId}/board/${b.id}`)}>
 										<div className="title">{b.title}</div>
 										{(b.description) && (
 											<div className="sub">{b.description}</div>
 										)}
-										<div className="row" style={{ gap: 8, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
-											<button className="btn ghost" onClick={() => onEditBoard(b)}>Edit</button>
-											<button className="btn ghost" onClick={() => onDeleteBoard(b)}>Delete</button>
+										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
+											<button className="btn ghost" onClick={() => setOpenMenuForBoardId(openMenuForBoardId === b.id ? null : b.id)} title="More">⋯</button>
+											{openMenuForBoardId === b.id && (
+												<div style={{ position: 'absolute', top: 36, right: 0, zIndex: 5 }}>
+													<div className="card" style={{ padding: 8, minWidth: 180 }}>
+														<div className="col" style={{ gap: 6 }}>
+															<button className="btn" onClick={() => { setOpenMenuForBoardId(null); onEditBoard(b); }}>Edit</button>
+															<button className="btn" style={{ background: 'transparent', color: 'var(--danger)' }} onClick={() => { setOpenMenuForBoardId(null); onDeleteBoard(b); }}>Delete</button>
+														</div>
+													</div>
+												</div>
+											)}
 										</div>
 									</div>
 								))}

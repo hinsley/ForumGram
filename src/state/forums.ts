@@ -13,6 +13,7 @@ interface ForumsState {
 	forums: Record<number, ForumMeta>;
 	selectedForumId: number | null;
 	addOrUpdateForum: (meta: ForumMeta) => void;
+	removeForum: (id: number) => void;
 	selectForum: (id: number | null) => void;
 	getForum: (id: number) => ForumMeta | undefined;
 	initFromStorage: () => void;
@@ -36,6 +37,22 @@ export const useForumsStore = create<ForumsState>((set, get) => ({
 			localStorage.setItem('fg_forums_v1', JSON.stringify(serializable));
 		} catch {}
 		return { forums: nextForums };
+	}),
+	removeForum: (id) => set((s) => {
+		const nextForums: Record<number, ForumMeta> = { ...s.forums };
+		delete nextForums[id];
+		try {
+			const serializable: Record<string, any> = {};
+			for (const [key, value] of Object.entries(nextForums)) {
+				serializable[key] = {
+					...value,
+					accessHash: value.accessHash !== undefined && value.accessHash !== null ? String(value.accessHash) : undefined,
+				};
+			}
+			localStorage.setItem('fg_forums_v1', JSON.stringify(serializable));
+		} catch {}
+		const nextSelected = s.selectedForumId === id ? null : s.selectedForumId;
+		return { forums: nextForums, selectedForumId: nextSelected };
 	}),
 	selectForum: (id) => set({ selectedForumId: id }),
 	getForum: (id) => get().forums[id],

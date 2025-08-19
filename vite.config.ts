@@ -18,6 +18,9 @@ export default defineConfig({
 		VitePWA({
 			registerType: 'autoUpdate',
 			includeAssets: ['icon.svg'],
+			devOptions: {
+				enabled: true,
+			},
 			manifest: {
 				name: 'ForumGram',
 				short_name: 'ForumGram',

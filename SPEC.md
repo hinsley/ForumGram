@@ -55,7 +55,9 @@
 
 **Package scripts**
 
-```json
+
+**Key Dependencies**
+
 {
   "scripts": {
     "dev": "vite",
@@ -66,11 +68,6 @@
     "lint": "eslint ."
   }
 }
-```
-
-**Key Dependencies**
-
-```
 telegram (GramJS)
 react, react-dom, react-router-dom
 zustand, @tanstack/react-query
@@ -82,23 +79,13 @@ jszip, file-saver (backup/export)
 # PWA & tooling
 workbox-window, vite-plugin-pwa, vite-plugin-node-polyfills (optional)
 zod (schema validation), date-fns, lodash-es
-```
-
-**Vite config notes**
-
-* Provide browser polyfills if GramJS requires Node shims (Buffer, process). Consider `vite-plugin-node-polyfills`.
-* Register PWA plugin with manifest (name, icons, start\_url `/`, display `standalone`).
-
-**Directory Structure**
-
-```
 / (repo)
   /src
     /app       # app bootstrap, routes
     /components
     /features
       /auth
-      /forum    # topics/boards, sub-threads, composer
+      /forum    # boards, sub-threads, composer
       /catalog  # discovery & catalogue
       /moderation
       /backup
@@ -111,15 +98,6 @@ zod (schema validation), date-fns, lodash-es
   vite.config.ts
   workbox-sw.ts
   vercel.json
-```
-
----
-
-## 3) MTProto / GramJS Integration
-
-**Client bootstrap**
-
-```ts
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram';
@@ -134,11 +112,6 @@ export async function makeClient(sessionStr: string | null) {
   await client.connect();
   return client;
 }
-```
-
-**Auth (phone code + 2FA)**
-
-```ts
 export async function signIn(client: TelegramClient, phone: string, code: string, password?: string) {
   try {
     return await client.invoke(new Api.auth.SignIn({
@@ -155,7 +128,93 @@ export async function signIn(client: TelegramClient, phone: string, code: string
     throw e;
   }
 }
-```
+export interface Session { dcId: number; authKey: string; userId: number; }
+
+export interface Forum { id: number; accessHash?: string; username?: string; title: string; isPublic: boolean; about?: string; members?: number; tags?: string[]; lang?: string; lastActivity?: number; source: 'username'|'invite'|'directory'; addedAt: number; }
+
+export interface Board { id: number; forumId: number; title: string; iconEmoji?: string; lastMsgId?: number; unreadCount?: number; pinned?: boolean; }
+
+export interface SubThread { id: string; boardId: number; title: string; createdBy: number; createdAt: number; lastMsgId?: number; lastActivity?: number; tag: string; }
+
+export interface Message { id: number; boardId: number; fromId: number; date: number; textMD: string; media?: MediaMeta; replyToId?: number; threadTag?: string; threadId?: string; edited?: boolean; }
+
+export interface MediaMeta { kind: 'photo'|'video'|'audio'|'file'; size?: number; mime?: string; thumbBlobId?: string; fileBlobId?: string; }
+
+export interface CatalogueSource { id: number; title: string; channelId: number; lastScannedMsgId?: number; }
+
+export interface AclRule { boardId?: number; threadTag?: string; allow?: string[]; deny?: string[]; }
+
+export interface ForumAcl { roles: Record<string, 'owner'|'admin'|'moderator'|'member'|'readonly'|'banned'>; rules: AclRule[]; sig?: string; }
+#t:<BASE32ID>|s:<BASE64URL_SIG>
+function composeMessage(userText: string, threadId: string, secret: CryptoKey, authorId: number) {
+  const safe = sanitizeMD(userText);
+  const nonce = randomNonce();
+  const sig = hmacBase64Url(secret, `${threadId}|${authorId}|${nonce}`);
+  return `${safe}\n\n#t:${threadId}|s:${sig}`;
+}
+
+function parseMessage(raw: string, secret?: CryptoKey) {
+  const lines = normalize(raw).split('\n');
+  const last = lines.at(-1)!;
+  const m = /^#t:([A-Z2-7]{4,12})\|s:([A-Za-z0-9_-]{16,})$/.exec(last);
+  let threadTag: string|undefined;
+  if (m) { /* verify if secret present; pop line; else ignore as text */ }
+  const visible = lines.join('\n');
+  const manifests = extractFencedBlocks(visible, ['tgthread v1', 'tgforum-acl v1']);
+  return { visible, threadTag, manifests };
+}
+{
+  "builds": [{ "src": "package.json", "use": "@vercel/static-build" }],
+  "routes": [{ "src": "/(.*)", "dest": "/index.html" }]
+}
+{
+  "name": "ForumGram",
+  "short_name": "ForumGram",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111",
+  "theme_color": "#111",
+  "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}, {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"}]
+}
+await client.invoke(new Api.messages.DeleteMessages({ id: [msgId], revoke: true }));
+await client.invoke(new Api.channels.EditBanned({
+  channel: forumPeer,
+  participant: user,
+  bannedRights: new Api.ChatBannedRights({
+    untilDate: 0,
+    sendMessages: true,
+  })
+}));
+const file = await client.uploadFile({ file: myFile, workers: 1 });
+await client.invoke(new Api.messages.SendMedia({
+  peer: forumPeer,
+  media: new Api.InputMediaUploadedDocument({ file, mimeType: myFile.type, attributes: [] }),
+  message: composeMessage(caption, threadId, secret, myId)
+}));
+<ReactMarkdown
+  remarkPlugins={[gfm]}
+  rehypePlugins={[[rehypeKatex], [rehypeHighlight], [rehypeSanitize, schema]]}
+>
+  {visibleText}
+</ReactMarkdown>
+
+**Vite config notes**
+
+* Provide browser polyfills if GramJS requires Node shims (Buffer, process). Consider `vite-plugin-node-polyfills`.
+* Register PWA plugin with manifest (name, icons, start\_url `/`, display `standalone`).
+
+**Directory Structure**
+
+
+---
+
+## 3) MTProto / GramJS Integration
+
+**Client bootstrap**
+
+
+**Auth (phone code + 2FA)**
+
 
 **Forum detection & info**
 
@@ -205,25 +264,6 @@ export async function signIn(client: TelegramClient, phone: string, code: string
 
 ## 5) Local Data Models (TypeScript)
 
-```ts
-export interface Session { dcId: number; authKey: string; userId: number; }
-
-export interface Forum { id: number; accessHash?: string; username?: string; title: string; isForum: boolean; isPublic: boolean; about?: string; members?: number; tags?: string[]; lang?: string; lastActivity?: number; source: 'username'|'invite'|'directory'; addedAt: number; }
-
-export interface Topic { id: number; forumId: number; title: string; iconEmoji?: string; lastMsgId?: number; unreadCount?: number; pinned?: boolean; }
-
-export interface SubThread { id: string; topicId: number; title: string; createdBy: number; createdAt: number; lastMsgId?: number; lastActivity?: number; tag: string; }
-
-export interface Message { id: number; topicId: number; fromId: number; date: number; textMD: string; media?: MediaMeta; replyToId?: number; threadTag?: string; threadId?: string; edited?: boolean; }
-
-export interface MediaMeta { kind: 'photo'|'video'|'audio'|'file'; size?: number; mime?: string; thumbBlobId?: string; fileBlobId?: string; }
-
-export interface CatalogueSource { id: number; title: string; channelId: number; lastScannedMsgId?: number; }
-
-export interface AclRule { topicId?: number; threadTag?: string; allow?: string[]; deny?: string[]; }
-
-export interface ForumAcl { roles: Record<string, 'owner'|'admin'|'moderator'|'member'|'readonly'|'banned'>; rules: AclRule[]; sig?: string; }
-```
 
 ---
 
@@ -235,9 +275,6 @@ export interface ForumAcl { roles: Record<string, 'owner'|'admin'|'moderator'|'m
 
 **Canonical Tag Line**
 
-```
-#t:<BASE32ID>|s:<BASE64URL_SIG>
-```
 
 * Regex: `^#t:([A-Z2-7]{4,12})\|s:([A-Za-z0-9_-]{16,})$`
 * `BASE32ID` is 4–12 chars, collision‑checked per Topic.
@@ -246,36 +283,7 @@ export interface ForumAcl { roles: Record<string, 'owner'|'admin'|'moderator'|'m
 
 **Thread Manifest (first post only)**
 
-````
-```tgthread v1
-{"id":"9k7w","title":"Kalman filter intuition","tags":["controls"],"owner":123456789,"created":1690000000,
- "sig":"<base64url>","salt":"<publicSalt>"}
-````
 
-````
-- The fenced block is hidden in UI; we show a badge instead.
-- Sign manifest with `forumSecret` over canonical JSON.
-
-**Parser/Composer (pseudocode)**
-```ts
-function composeMessage(userText: string, threadId: string, secret: CryptoKey, authorId: number) {
-  const safe = sanitizeMD(userText);
-  const nonce = randomNonce();
-  const sig = hmacBase64Url(secret, `${threadId}|${authorId}|${nonce}`);
-  return `${safe}\n\n#t:${threadId}|s:${sig}`;
-}
-
-function parseMessage(raw: string, secret?: CryptoKey) {
-  const lines = normalize(raw).split('\n');
-  const last = lines.at(-1)!;
-  const m = /^#t:([A-Z2-7]{4,12})\|s:([A-Za-z0-9_-]{16,})$/.exec(last);
-  let threadTag: string|undefined;
-  if (m) { /* verify if secret present; pop line; else ignore as text */ }
-  const visible = lines.join('\n');
-  const manifests = extractFencedBlocks(visible, ['tgthread v1', 'tgforum-acl v1']);
-  return { visible, threadTag, manifests };
-}
-````
 
 **Sanitization Rules**
 
@@ -290,124 +298,10 @@ function parseMessage(raw: string, secret?: CryptoKey) {
 
 **ACL Storage**: Signed fenced JSON in description or pinned message in **General** topic:
 
-````
-```tgforum-acl v1
-{"roles":{"123":"moderator","456":"readonly"},
- "rules":[{"topicId":10,"allow":["admin","moderator"],"deny":["member"]}],
- "sig":"<base64url>"}
-````
 
-````
-**Enforcement**
-- **Telegram‑level**: ban/kick/restrict, delete, slowmode, close topics.
-- **Client‑level**: hide composer per Topic/sub‑thread; auto‑delete violating posts if an admin is online.
-- **Optional later**: helper bot for 24/7 enforcement.
-
-**Secrets**
-- `forumSecret` stored locally for owners/admins; **optional passcode** to encrypt with WebCrypto (PBKDF2→AES‑GCM).
-
----
-
-## 8) Moderation & Anti‑Spam
-**Heuristics**: URL flood (>N links/Δt), duplicate text, banned regex, mass mentions, first‑seen age < X minutes.
-
-**Actions**: shadow‑hide locally → if admin, `deleteMessages`; optional `channels.editBanned` for offenders; toggle slowmode or close Topic.
-
-**UX**: moderation bar with one‑tap actions; audit log (local only) per session.
-
----
-
-## 9) Discovery & Catalogue (Client‑Only)
-**Detect forums**: `forum=true` on channel (via `channels.getFullChannel`).
-
-**Resolve**: `contacts.resolveUsername` for public `@handle`; `messages.checkChatInvite` for invite links.
-
-**Directory Channels**: App can follow one or more public channels that post forum links + optional **tgforum‑manifest** JSON fence. The app parses and populates a browsable list.
-
-**Catalogue Storage (IndexedDB)**: `Forum` entries + `CatalogueSource` (directory channels).
-
-**UI**: Discover panel with *Handle/Link*, *Directories*, *Recent* tabs; preview card (title, avatar, members, last activity, tags); **Join**, **Add to Catalogue**, **Open Read‑Only** (if public history).
-
----
-
-## 10) Backup & Export (Owner/Admin)
-**Scope**: All topics, messages, media, manifests.
-
-**Process**
-1. List Topics via `channels.getForumTopics`.
-2. For each Topic, page history newest→oldest; store messages + media metadata.
-3. Download media on demand or batch (throttled); store as blobs in IndexedDB.
-4. Export via JSZip:
-   - `/forum.json` (forum & topics metadata)
-   - `/topics/<topicId>/thread-<threadId>.json`
-   - `/media/<blobId>`
-   - `/raw/<messageId>.txt` (optional)
-5. Resume with `/backup_state.json` checkpoints.
-
-**UI**: scope select, include media toggle, concurrency slider, progress bars, **Export ZIP** button.
-
-**Rate limits**: exponential back‑off; queue concurrency ≤ 2–3.
-
----
-
-## 11) Search & Indexing
-- **Server search**: `messages.search` with `top_msg_id` for Topic scope and query `#t:<id>` for sub‑thread recall.
-- **Local index**: Build per‑Topic FlexSearch index for message text, authors, and tags; evict LRU topics; cap index size.
-- **Jump to last unread**: track per‑Topic `lastSeenMsgId` locally.
-
----
-
-## 12) PWA & Performance
-- **Virtualized lists** everywhere (`react-virtuoso`).
-- **Prefetch** ±1 page when scrolling.
-- **Thumbnails first**; on‑demand full media download; stream via object URLs.
-- **Service Worker**: cache app shell; cache recent media; background sync for pending sends (if browser permits).
-- **Installable** on desktop/mobile; dark/light themes.
-
----
-
-## 13) Accessibility & i18n
-- Keyboard shortcuts: `j/k` navigate, `r` reply, `n` new sub‑thread.
-- ARIA roles for lists, announcements on new messages.
-- RTL support; easy string externalization; date/number locale via `Intl`.
-
----
-
-## 14) Error Handling & Edge Cases
-- Network drops → queue sends, retry with back‑off; show offline banner.
-- Auth errors: expired code, 2FA required, flood wait; surface actionable guidance.
-- Permissions errors: disable composer with reason; reflect Telegram rights.
-- Spoofed metadata: treat as plain text unless verified.
-
----
-
-## 15) Build, Deploy, and Ops
-**Vercel**
-- Create project → link to GitHub repo `forumgram`.
-- Domain: `forum-gram.vercel.app`.
-- Build command: `vite build`; output: `dist/`.
-
-**vercel.json** (minimal)
-```json
-{
-  "builds": [{ "src": "package.json", "use": "@vercel/static-build" }],
-  "routes": [{ "src": "/(.*)", "dest": "/index.html" }]
-}
-````
 
 **PWA Manifest** (`public/manifest.webmanifest`)
 
-```json
-{
-  "name": "ForumGram",
-  "short_name": "ForumGram",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#111",
-  "theme_color": "#111",
-  "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}, {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"}]
-}
-```
 
 **Security Notes**
 
@@ -470,67 +364,21 @@ function parseMessage(raw: string, secret?: CryptoKey) {
 
 **ReplyTo top message (post in Topic)**
 
-```ts
-import { Api } from 'telegram';
-await client.invoke(new Api.messages.SendMessage({
-  peer: forumPeer, // channel
-  message: composeMessage(text, threadId, secret, myId),
-  replyTo: new Api.InputReplyToMessage({ replyToTopId: topicId })
-}));
-```
 
 **Topic‑scoped search for sub‑thread**
 
-```ts
-await client.invoke(new Api.messages.Search({
-  peer: forumPeer,
-  q: `#t:${threadId}`,
-  topMsgId: topicId,
-  limit: 100
-}));
-```
 
 **Delete message**
 
-```ts
-await client.invoke(new Api.messages.DeleteMessages({ id: [msgId], revoke: true }));
-```
 
 **Restrict user**
 
-```ts
-await client.invoke(new Api.channels.EditBanned({
-  channel: forumPeer,
-  participant: user,
-  bannedRights: new Api.ChatBannedRights({
-    untilDate: 0,
-    sendMessages: true,
-  })
-}));
-```
 
 **Upload media & send**
 
-```ts
-const file = await client.uploadFile({ file: myFile, workers: 1 });
-await client.invoke(new Api.messages.SendMedia({
-  peer: forumPeer,
-  media: new Api.InputMediaUploadedDocument({ file, mimeType: myFile.type, attributes: [] }),
-  message: composeMessage(caption, threadId, secret, myId),
-  replyTo: new Api.InputReplyToMessage({ replyToTopId: topicId })
-}));
-```
 
 **Sanitized Markdown render (React)**
 
-```tsx
-<ReactMarkdown
-  remarkPlugins={[gfm]}
-  rehypePlugins={[[rehypeKatex], [rehypeHighlight], [rehypeSanitize, schema]]}
->
-  {visibleText}
-</ReactMarkdown>
-```
 
 ---
 

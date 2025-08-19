@@ -22,9 +22,11 @@ export interface DisplayMessage {
 	attachments?: AttachmentMeta[];
 	canEdit?: boolean;
 	canDelete?: boolean;
+  cardId? string;
+  authorUserId?: number;
 }
-
-export default function MessageItem({ msg, onEdit, onDelete }: { msg: DisplayMessage; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void }) {
+        
+export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete }: { msg: DisplayMessage; canEdit?: boolean; canDelete?: boolean; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void; }) {
 	const dateObj = new Date(msg.date * 1000);
 	const datePart = format(dateObj, 'd MMMM yyyy');
 	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
@@ -44,6 +46,7 @@ export default function MessageItem({ msg, onEdit, onDelete }: { msg: DisplayMes
 	}
 
 	const [thumbUrls, setThumbUrls] = useState<(string | undefined)[]>([]);
+	const [menuOpen, setMenuOpen] = useState(false);
 	useEffect(() => {
 		let canceled = false;
 		const cleanups: Array<() => void> = [];
@@ -116,14 +119,34 @@ export default function MessageItem({ msg, onEdit, onDelete }: { msg: DisplayMes
 					<div className="author-activity">Activity: {msg.activityCount}</div>
 				)}
 			</div>
-			<div className="post-body">
+			<div className="post-body" style={{ position: 'relative' }}>
+				{(canEdit || canDelete) && (
+					<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
+						<button className="btn ghost" onClick={() => setMenuOpen((v) => !v)} title="More">⋯</button>
+						{menuOpen && (
+							<div style={{ position: 'absolute', top: 36, right: 0, zIndex: 5 }}>
+								<div className="card" style={{ padding: 8, minWidth: 180 }}>
+									<div className="col" style={{ gap: 6 }}>
+										{canEdit && (
+											<button className="btn" onClick={() => { setMenuOpen(false); onEdit?.(msg); }}>Edit</button>
+										)}
+										{canDelete && (
+											<button className="btn" style={{ background: 'transparent', color: 'var(--danger)' }} onClick={() => { setMenuOpen(false); onDelete?.(msg); }}>Delete</button>
+										)}
+									</div>
+								</div>
+							</div>
+						)}
+					</div>
+				)}
 				<div className="post-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
 					<div>Posted {postedAt}</div>
 					<div style={{ display: 'flex', gap: 8 }}>
-						{msg.canEdit ? <button className="btn ghost" onClick={() => onEdit && onEdit(msg)}>Edit</button> : null}
-						{msg.canDelete ? <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={() => onDelete && onDelete(msg)}>Delete</button> : null}
+						{canEdit ? <button className="btn ghost" onClick={() => onEdit?.(msg)}>Edit</button> : null}
+						{canDelete ? <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={() => onDelete?.(msg)}>Delete</button> : null}
 					</div>
 				</div>
+			</div>
 				<div className="post-content"><MarkdownView text={msg.text} /></div>
 				{Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
 					<div className="post-attachments" style={{ marginTop: 8 }}>
