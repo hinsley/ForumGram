@@ -131,10 +131,9 @@ export default function BoardPage() {
                     <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
                             <div className="row" style={{ alignItems: 'center' }}>
-                                <button className="btn ghost" onClick={() => setSelectedThreadId(null)}>Back to threads</button>
+                                <button className="btn ghost" onClick={() => setSelectedThreadId(null)}>Back</button>
                                 <h3 style={{ margin: 0 }}>{activeThread ? activeThread.title : 'Thread'}</h3>
                                 <div className="spacer" />
-                                <button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back to board</button>
                             </div>
                         </div>
                         <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
