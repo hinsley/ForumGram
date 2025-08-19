@@ -141,7 +141,7 @@ export async function sendPlainMessage(input: Api.TypeInputPeer, message: string
 
 export async function deleteMessages(input: Api.TypeInputPeer, messageIds: number[]) {
 	const client = await getClient();
-	await client.invoke(new Api.messages.DeleteMessages({ peer: input, id: messageIds, revoke: true } as any));
+	await (client as any).deleteMessages(input as any, messageIds, { revoke: true });
 }
 
 export async function editMessage(input: Api.TypeInputPeer, messageId: number, message: string, entities?: any[]) {

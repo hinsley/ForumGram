@@ -35,6 +35,7 @@ export default function ForumPage() {
 			const text = composeBoardCard(id, { title, description });
 			const input = getInputPeerForForumId(forumId);
 			await sendPlainMessage(input, text);
+			await new Promise((r) => setTimeout(r, 500));
 			await refetch();
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to create board');
@@ -53,6 +54,7 @@ export default function ForumPage() {
 			if (newMsgId) {
 				await deleteMessages(input, [b.messageId]);
 			}
+			await new Promise((r) => setTimeout(r, 300));
 			await refetch();
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to edit board');
@@ -64,6 +66,7 @@ export default function ForumPage() {
 			if (!confirm(`Delete board "${b.title}"? This does not delete child threads or posts.`)) return;
 			const input = getInputPeerForForumId(forumId);
 			await deleteMessages(input, [b.messageId]);
+			await new Promise((r) => setTimeout(r, 300));
 			await refetch();
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to delete board');

@@ -75,6 +75,7 @@ export default function BoardPage() {
             const text = composeThreadCard(idHash, String(boardId), { title });
             const input = getInputPeerForForumId(forumId);
             await sendPlainMessage(input, text);
+            await new Promise((r) => setTimeout(r, 500));
             await refetchThreads();
         } catch (e: any) {
             alert(e?.message ?? 'Failed to create thread');
@@ -92,6 +93,7 @@ export default function BoardPage() {
             if (newMsgId) {
                 await deleteMessages(input, [t.messageId]);
             }
+            await new Promise((r) => setTimeout(r, 300));
             await refetchThreads();
         } catch (e: any) {
             alert(e?.message ?? 'Failed to edit thread');
@@ -103,6 +105,7 @@ export default function BoardPage() {
             if (!confirm(`Delete thread "${t.title}"? Posts will remain as zombie messages.`)) return;
             const input = getInputPeerForForumId(forumId);
             await deleteMessages(input, [t.messageId]);
+            await new Promise((r) => setTimeout(r, 300));
             await refetchThreads();
         } catch (e: any) {
             alert(e?.message ?? 'Failed to delete thread');
