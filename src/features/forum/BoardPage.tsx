@@ -218,7 +218,7 @@ export default function BoardPage() {
         }
     }
 
-    function triggerFilePick(accept?: string) {
+    function triggerFilePick(accept?: string, opts?: { filterOutSvg?: boolean }) {
         const input = document.createElement('input');
         input.type = 'file';
         if (accept) input.accept = accept;
@@ -228,6 +228,10 @@ export default function BoardPage() {
             if (!files.length) return;
             const client = await getClient();
             for (const file of files) {
+                if (opts?.filterOutSvg && file.type === 'image/svg+xml') {
+                    // Skip SVG for media mode
+                    continue;
+                }
                 const id = generateIdHash(8);
                 setDraftAttachments(prev => [...prev, { id, file, status: 'uploading', name: file.name, mimeType: file.type }]);
                 try {
@@ -329,7 +333,7 @@ export default function BoardPage() {
                                 <button className="btn" title="Attach files" onClick={() => triggerFilePick()}>
                                     📎
                                 </button>
-                                <button className="btn" title="Attach images/videos" onClick={() => triggerFilePick('image/*,video/*')}>
+                                <button className="btn" title="Attach images/videos" onClick={() => triggerFilePick('image/jpeg,image/png,image/webp,video/*', { filterOutSvg: true })}>
                                     🖼️
                                 </button>
                             </div>
