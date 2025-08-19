@@ -85,7 +85,7 @@ export default function DiscoverPage() {
 				{addMode ? (
 					<div className="col">
 						<div className="card" style={{ padding: 12 }}>
-							<h3>Add a forum</h3>
+							<h3>Join a forum</h3>
 							<div className="field">
 								<label className="label">Forum handle or invite</label>
 								<div className="form-row">
@@ -108,7 +108,7 @@ export default function DiscoverPage() {
 				) : (
 					<div className="card" style={{ padding: 12 }}>
 						<h3>Welcome</h3>
-						<p>Select a forum from the left, or click + to add a forum.</p>
+						<p>Select a forum from the left, or click + to join a forum.</p>
 					</div>
 				)}
 			</main>
