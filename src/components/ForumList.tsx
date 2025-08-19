@@ -6,7 +6,7 @@ export default function ForumList() {
 	const forums = useForumsStore((s) => s.forums);
 	const removeForum = useForumsStore((s) => s.removeForum);
 	const navigate = useNavigate();
-\n+	const [openMenuForId, setOpenMenuForId] = useState<number | null>(null);
+	const [openMenuForId, setOpenMenuForId] = useState<number | null>(null);
 
 	const items = useMemo(() => {
 		return Object.values(forums)
@@ -82,4 +82,3 @@ export default function ForumList() {
 		</div>
 	);
 }
-
