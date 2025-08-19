@@ -5,7 +5,7 @@ import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
-import { deleteMessages, sendPlainMessage, getClient, sendMediaMessage, sendMultiMediaMessage } from '@lib/telegram/client';
+import { deleteMessages, sendPlainMessage, getClient, sendMediaMessage, sendMultiMediaMessage, editMessage } from '@lib/telegram/client';
 import { prepareExistingInputMedia, prepareUploadedInputMedia, PreparedInputMedia } from '@lib/telegram/media';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -94,6 +94,8 @@ export default function BoardPage() {
                 const me: any = await (client as any).getMe();
                 myUserId = Number((me?.id ?? me?.user?.id) || 0) || undefined;
             } catch {}
+            const EDIT_WINDOW_SECONDS = 48 * 60 * 60;
+            const nowSec = Math.floor(Date.now() / 1000);
             const mapped = items.map((p) => ({
                 id: p.messageId,
                 from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
@@ -102,7 +104,9 @@ export default function BoardPage() {
                 threadId: p.parentThreadId,
                 avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
                 attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],
-                canEdit: myUserId && p.fromUserId ? (myUserId === p.fromUserId) : false,
+                groupedId: p.groupedId,
+                canEdit: myUserId && p.fromUserId ? ((myUserId === p.fromUserId) && (typeof p.date === 'number' ? (nowSec - p.date) <= EDIT_WINDOW_SECONDS : false)) : false,
+                canDelete: myUserId && p.fromUserId ? (myUserId === p.fromUserId) : false,
             }));
             mapped.sort((a, b) => a.date - b.date);
             return mapped as any[];
@@ -161,56 +165,40 @@ export default function BoardPage() {
     const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
     const [isEditing, setIsEditing] = useState(false);
     const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
-    const [editingGroupedId, setEditingGroupedId] = useState<string | null>(null);
     async function onSendPost() {
         try {
             if (!activeThreadId) return;
-            const idHash = isEditing && editingMessageId ? await (async () => {
-                // Reuse old id from the message being edited by parsing its text
-                const input = getInputPeerForForumId(forumId);
-                const client = await getClient();
-                const msg: any = await (client as any).getMessages(input as any, [editingMessageId]);
-                const m = Array.isArray(msg) ? msg[0] : msg;
-                const txt: string = m?.message ?? '';
-                const lines = (txt ?? '').split(/\n/);
-                // Expect 'fg.post' on first line and id on second line
-                if (lines[0] === 'fg.post' && lines[1]) return lines[1].trim();
-                return generateIdHash(16);
-            })() : generateIdHash(16);
-            const text = composePostCard(idHash, activeThreadId, { content: composerText });
             const input = getInputPeerForForumId(forumId);
-
-            // Prepare media list from draft
-            const prepared = draftAttachments.filter(a => a.prepared && a.status === 'uploaded').map(a => a.prepared!.inputMedia);
-
-            if (prepared.length === 0) {
-                await sendPlainMessage(input, text);
-            } else if (prepared.length === 1) {
-                await sendMediaMessage(input, text, prepared[0]!);
-            } else {
-                await sendMultiMediaMessage(input, text, prepared);
-            }
-
-            // If editing, delete old message(s)
             if (isEditing && editingMessageId) {
-                const idsToDelete: number[] = [editingMessageId];
-                if (editingGroupedId) {
-                    try {
-                        const client = await getClient();
-                        // Fetch around the message and collect same groupedId
-                        const page: any = await client.invoke(new (await import('telegram')).Api.messages.GetHistory({ peer: input, addOffset: 0, limit: 50 } as any));
-                        const msgs: any[] = (page.messages ?? []).filter((mm: any) => (mm.className === 'Message' || mm._ === 'message') && String(mm.groupedId ?? mm.grouped_id ?? '') === String(editingGroupedId));
-                        idsToDelete.splice(0, idsToDelete.length, ...msgs.map((mm: any) => Number(mm.id)));
-                    } catch {}
+                // Edit in place (no new card); Telegram restricts editing of media captions only.
+                // For simplicity, only edit text when editing; attachments in edit mode are ignored.
+                const newText = composePostCard(/* preserve id by reusing original lines */ (await (async () => {
+                    const client = await getClient();
+                    const msg: any = await (client as any).getMessages(input as any, [editingMessageId]);
+                    const m = Array.isArray(msg) ? msg[0] : msg;
+                    const txt: string = m?.message ?? '';
+                    const lines = (txt ?? '').split(/\n/);
+                    return (lines[0] === 'fg.post' && lines[1]) ? lines[1].trim() : generateIdHash(16);
+                })()), activeThreadId, { content: composerText });
+                await editMessage(input, editingMessageId, newText);
+            } else {
+                const idHash = generateIdHash(16);
+                const text = composePostCard(idHash, activeThreadId, { content: composerText });
+                // Prepare media list from draft
+                const prepared = draftAttachments.filter(a => a.prepared && a.status === 'uploaded').map(a => a.prepared!.inputMedia);
+                if (prepared.length === 0) {
+                    await sendPlainMessage(input, text);
+                } else if (prepared.length === 1) {
+                    await sendMediaMessage(input, text, prepared[0]!);
+                } else {
+                    await sendMultiMediaMessage(input, text, prepared);
                 }
-                await deleteMessages(input, idsToDelete);
             }
 
             setComposerText('');
             setDraftAttachments([]);
             setIsEditing(false);
             setEditingMessageId(null);
-            setEditingGroupedId(null);
             // slight delay to let history-scan pick it up, then refetch
             setTimeout(() => { refetchPosts(); }, 250);
         } catch (e: any) {
@@ -261,9 +249,6 @@ export default function BoardPage() {
                 }
             }
             setDraftAttachments(existing);
-            // Track grouped id for full delete if needed
-            const rawGrouped = (posts as any[]).find((p: any) => p.id === msg.id)?.groupedId;
-            setEditingGroupedId(rawGrouped ?? null);
         } catch (e: any) {
             alert(e?.message ?? 'Failed to enter edit mode');
         }
@@ -392,4 +377,3 @@ export default function BoardPage() {
         </div>
     );
 }
-
