@@ -210,13 +210,7 @@ export default function BoardPage() {
                         <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
                             <div className="row" style={{ alignItems: 'center' }}>
                                 <button className="btn ghost" onClick={() => { setSelectedThreadId(null); navigate(`/forum/${forumId}/board/${boardId}`); }}>Back</button>
-                                <h3 style={{ margin: 0 }}>
-                                    <span>{forumTitle}</span>
-                                    <span style={{ margin: '0 6px' }}>&gt;</span>
-                                    <span>{boardTitle}</span>
-                                    <span style={{ margin: '0 6px' }}>&gt;</span>
-                                    <span>{activeThread ? activeThread.title : 'Thread'}</span>
-                                </h3>
+                                <h3 style={{ margin: 0 }}>{activeThread ? activeThread.title : 'Thread'}</h3>
                                 <div className="spacer" />
                             </div>
                         </div>
