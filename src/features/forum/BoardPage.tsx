@@ -5,8 +5,9 @@ import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, PostCard, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
-import { deleteMessages, sendPlainMessage } from '@lib/telegram/client';
+import { deleteMessages, sendPlainMessage, getClient } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
+import { getAvatarBlob, setAvatarBlob } from '@lib/db';
 
 export default function BoardPage() {
     const { id, boardId } = useParams();
@@ -48,16 +49,44 @@ export default function BoardPage() {
     const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
         queryKey: ['posts', forumId, boardId, activeThreadId],
         queryFn: async () => {
-            if (!activeThreadId) return [] as PostCard[];
+            if (!activeThreadId) return [] as any[];
             const input = getInputPeerForForumId(forumId);
             const items = await searchPostCards(input, String(activeThreadId));
+            // Build author map and load avatars once per unique user
+            const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
+            const client = await getClient();
+            const userIdToUrl: Record<number, string | undefined> = {};
+            const revokeList: string[] = [];
+            for (const uid of uniqueUserIds) {
+                try {
+                    const cached = await getAvatarBlob(uid);
+                    if (cached) {
+                        userIdToUrl[uid] = URL.createObjectURL(cached);
+                        continue;
+                    }
+                    const userObj = items.find((p) => p.fromUserId === uid)?.user;
+                    if (userObj && userObj.photo) {
+                        const data: any = await (client as any).downloadProfilePhoto(userObj);
+                        const blob = data instanceof Blob ? data : new Blob([data]);
+                        await setAvatarBlob(uid, blob);
+                        const url = URL.createObjectURL(blob);
+                        userIdToUrl[uid] = url;
+                        revokeList.push(url);
+                    } else {
+                        userIdToUrl[uid] = undefined;
+                    }
+                } catch {
+                    userIdToUrl[uid] = undefined;
+                }
+            }
+            // Map to display messages
             const mapped = items.map((p) => ({
                 id: p.messageId,
-                from: p.fromUserId ? `user:${p.fromUserId}` : 'unknown',
+                from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
                 date: p.date ?? 0,
                 text: p.content,
                 threadId: p.parentThreadId,
-                avatarUrl: undefined,
+                avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
                 attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],
             }));
             mapped.sort((a, b) => a.date - b.date);

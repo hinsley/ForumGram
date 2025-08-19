@@ -29,6 +29,7 @@ export interface PostCard {
 	parentThreadId: string;
 	messageId: number;
 	fromUserId?: number;
+	user?: any;
 	date?: number;
 	content: string;
 	media?: any; // raw GramJS media for reuse when editing
@@ -207,6 +208,8 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit, filter: new Api.InputMessagesFilterEmpty() }));
 	const items: PostCard[] = [];
 	const seenMsgIds = new Set<number>();
+	const usersMap: Record<string, any> = {};
+	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
 	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 	for (const m of messages) {
 		const parsed = parsePostCard(m.message ?? '');
@@ -215,7 +218,7 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
 		const msgId = Number(m.id);
 		seenMsgIds.add(msgId);
-		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 	}
 
 	// Fallback: scan recent history if search returns few/none (handles punctuation tokenization issues)
@@ -225,6 +228,7 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 		let pages = 0;
 		while (items.length < queryLimit && pages < 30) {
 			const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, offsetId, addOffset: 0, limit: pageSize }));
+			(page.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
 			const batch: any[] = (page.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 			if (!batch.length) break;
 			for (const m of batch) {
@@ -235,7 +239,7 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 				if (parsed.parentThreadId !== parentThreadId) continue;
 				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
 				seenMsgIds.add(msgId);
-				items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+				items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 				if (items.length >= queryLimit) break;
 			}
 			// pagination: next offset is the last message id in this batch
