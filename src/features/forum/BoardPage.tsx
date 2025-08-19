@@ -29,7 +29,8 @@ export default function BoardPage() {
     });
 
     const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-    const activeThreadId = selectedThreadId ?? (threads[0]?.id ?? null);
+    const activeThreadId = selectedThreadId; // do not auto-select any thread
+    const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 
     const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
         queryKey: ['posts', forumId, boardId, activeThreadId],
@@ -98,45 +99,55 @@ export default function BoardPage() {
             <aside className="sidebar">
                 <div className="col">
                     <ForumList />
-                    <div className="hr" />
-                    <h4>Threads</h4>
-                    <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-                        <button className="btn" onClick={onCreateThread}>New Thread</button>
-                        <button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
-                    </div>
-                    <div className="list">
-                        {loadingThreads ? <div className="sub">Loading...</div> : threadsError ? <div style={{ color: 'var(--danger)' }}>{(threadsError as any)?.message ?? 'Error'}</div> : (
-                            threads.map((t) => (
-                                <div key={t.id} className="list-item" onClick={() => setSelectedThreadId(t.id)}>
-                                    <div className="title">{t.title}</div>
-                                    <div className="row" style={{ gap: 8, marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
-                                        <button className="btn ghost" onClick={() => onDeleteThread(t)}>Delete</button>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
                 </div>
             </aside>
             <main className="main">
-                <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
+                {!activeThreadId ? (
+                    <div className="card" style={{ padding: 12 }}>
                         <div className="row" style={{ alignItems: 'center' }}>
                             <button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
-                            <h3 style={{ margin: 0 }}>Board {boardId}</h3>
+                            <h3 style={{ margin: 0 }}>Threads</h3>
                             <div className="spacer" />
+                            <button className="btn" onClick={onCreateThread}>New Thread</button>
                         </div>
-                    </div>
-                    <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
-                        {loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-                            <MessageList messages={posts as any[]} />
+                        {loadingThreads ? (
+                            <div style={{ marginTop: 8 }}>Loading...</div>
+                        ) : threadsError ? (
+                            <div style={{ marginTop: 8, color: 'var(--danger)' }}>{(threadsError as any)?.message ?? 'Error'}</div>
+                        ) : (
+                            <div className="gallery boards" style={{ marginTop: 12 }}>
+                                {threads.map((t) => (
+                                    <div key={t.id} className="chiclet" onClick={() => setSelectedThreadId(t.id)}>
+                                        <div className="title">{t.title}</div>
+                                        <div className="row" style={{ gap: 8, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+                                            <button className="btn ghost" onClick={() => onDeleteThread(t)}>Delete</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
-                    <div className="composer">
-                        <textarea className="textarea" value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder={'Write a post...'} />
-                        <button className="btn primary" onClick={onSendPost} disabled={!composerText.trim() || !activeThreadId}>Post</button>
+                ) : (
+                    <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
+                            <div className="row" style={{ alignItems: 'center' }}>
+                                <button className="btn ghost" onClick={() => setSelectedThreadId(null)}>Back to threads</button>
+                                <h3 style={{ margin: 0 }}>{activeThread ? activeThread.title : 'Thread'}</h3>
+                                <div className="spacer" />
+                                <button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back to board</button>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
+                            {loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
+                                <MessageList messages={posts as any[]} />
+                            )}
+                        </div>
+                        <div className="composer">
+                            <textarea className="textarea" value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder={'Write a post...'} />
+                            <button className="btn primary" onClick={onSendPost} disabled={!composerText.trim() || !activeThreadId}>Post</button>
+                        </div>
                     </div>
-                </div>
+                )}
             </main>
         </div>
     );
