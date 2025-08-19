@@ -211,7 +211,7 @@ export default function BoardPage() {
 	async function sendMediaMessage(input: any, caption: string, media: any) {
 		const client = await getClient();
 		const rid = BigInt(Date.now() * 1000 + Math.floor(Math.random() * 1000));
-		await client.invoke(new Api.messages.SendMedia({ peer: input, media, message: caption, randomId: rid }));
+		await client.invoke(new Api.messages.SendMedia({ peer: input, media, message: caption, randomId: rid as any }));
 	}
 
 	async function sendMultiMediaMessage(input: any, caption: string, mediaList: any[]) {
@@ -220,7 +220,7 @@ export default function BoardPage() {
 		const multiMedia = mediaList.map((m, i) => new Api.InputSingleMedia({
 			media: m,
 			message: i === 0 ? caption : '',
-			randomId: BigInt(now + i + Math.floor(Math.random() * 1000)),
+			randomId: (BigInt(now + i + Math.floor(Math.random() * 1000)) as any),
 		}));
 		await client.invoke(new Api.messages.SendMultiMedia({ peer: input, multiMedia }));
 	}
