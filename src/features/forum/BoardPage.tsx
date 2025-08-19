@@ -4,7 +4,7 @@ import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, PostCard, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
+import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -56,7 +56,6 @@ export default function BoardPage() {
             const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
             const client = await getClient();
             const userIdToUrl: Record<number, string | undefined> = {};
-            const revokeList: string[] = [];
             for (const uid of uniqueUserIds) {
                 try {
                     const cached = await getAvatarBlob(uid);
@@ -64,14 +63,22 @@ export default function BoardPage() {
                         userIdToUrl[uid] = URL.createObjectURL(cached);
                         continue;
                     }
-                    const userObj = items.find((p) => p.fromUserId === uid)?.user;
-                    if (userObj && userObj.photo) {
-                        const data: any = await (client as any).downloadProfilePhoto(userObj);
-                        const blob = data instanceof Blob ? data : new Blob([data]);
-                        await setAvatarBlob(uid, blob);
-                        const url = URL.createObjectURL(blob);
-                        userIdToUrl[uid] = url;
-                        revokeList.push(url);
+                    let userObj = items.find((p) => p.fromUserId === uid)?.user;
+                    if (!userObj) {
+                        try {
+                            userObj = await (client as any).getEntity(uid);
+                        } catch {}
+                    }
+                    if (userObj) {
+                        try {
+                            const data: any = await (client as any).downloadProfilePhoto(userObj);
+                            const blob = data instanceof Blob ? data : new Blob([data]);
+                            await setAvatarBlob(uid, blob);
+                            const url = URL.createObjectURL(blob);
+                            userIdToUrl[uid] = url;
+                        } catch {
+                            userIdToUrl[uid] = undefined;
+                        }
                     } else {
                         userIdToUrl[uid] = undefined;
                     }
