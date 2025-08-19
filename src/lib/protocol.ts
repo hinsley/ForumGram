@@ -149,14 +149,44 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 	const q = `fg.post ${parentThreadId}`;
 	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit, filter: new Api.InputMessagesFilterEmpty() }));
 	const items: PostCard[] = [];
+	const seenMsgIds = new Set<number>();
 	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 	for (const m of messages) {
 		const parsed = parsePostCard(m.message ?? '');
 		if (!parsed) continue;
 		if (parsed.parentThreadId !== parentThreadId) continue;
 		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
-		items.push({ id: parsed.id, parentThreadId, messageId: Number(m.id), fromUserId, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+		const msgId = Number(m.id);
+		seenMsgIds.add(msgId);
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 	}
+
+	// Fallback: scan recent history if search returns few/none (handles punctuation tokenization issues)
+	if (items.length === 0) {
+		let offsetId = 0;
+		const pageSize = Math.min(100, queryLimit);
+		let pages = 0;
+		while (items.length < queryLimit && pages < 30) {
+			const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, offsetId, addOffset: 0, limit: pageSize }));
+			const batch: any[] = (page.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			if (!batch.length) break;
+			for (const m of batch) {
+				const msgId = Number(m.id);
+				if (seenMsgIds.has(msgId)) continue;
+				const parsed = parsePostCard(m.message ?? '');
+				if (!parsed) continue;
+				if (parsed.parentThreadId !== parentThreadId) continue;
+				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+				seenMsgIds.add(msgId);
+				items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+				if (items.length >= queryLimit) break;
+			}
+			// pagination: next offset is the last message id in this batch
+			offsetId = Number(batch[batch.length - 1].id);
+			pages++;
+		}
+	}
+
 	return items;
 }
 
