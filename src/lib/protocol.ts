@@ -91,8 +91,8 @@ export function parseThreadCard(text: string): { id: string; parentBoardId: stri
 }
 
 export function composePostCard(id: string, parentThreadId: string, data: { content: string }): string {
-	const payload = JSON.stringify({ content: escapeMarkdownForTelegram(data.content) });
-	return `fg.post\n${id}\nparent:${parentThreadId}\n${payload}`;
+	const escaped = escapeMarkdownForTelegram(data.content);
+	return `fg.post\n${id}\nparent:${parentThreadId}\ncontent:\n${escaped}`;
 }
 
 export function parsePostCard(text: string): { id: string; parentThreadId: string; data: { content: string } } | null {
@@ -103,6 +103,12 @@ export function parsePostCard(text: string): { id: string; parentThreadId: strin
 	const parentLine = lines[2] ?? '';
 	if (!parentLine.startsWith('parent:')) return null;
 	const parentThreadId = parentLine.slice('parent:'.length).trim();
+	// New format: explicit content section to avoid JSON escaping
+	if (lines[3] === 'content:') {
+		const content = lines.slice(4).join('\n');
+		return { id, parentThreadId, data: { content } };
+	}
+	// Legacy JSON format fallback
 	try {
 		const jsonStr = lines.slice(3).join('\n');
 		const obj = JSON.parse(jsonStr);
