@@ -1,7 +1,7 @@
 // Utilities to escape and unescape Markdown characters so Telegram doesn't strip them
 
-// Telegram MarkdownV2 special characters
-const TELEGRAM_MD_CHARS = '_*[]()~`>#+-=|{}.!';
+// Telegram MarkdownV2 special characters plus '"' to avoid issues in JSON contexts
+const TELEGRAM_MD_CHARS = '_*[]()~`>#+-=|{}.!"';
 
 function isTelegramMdChar(ch: string): boolean {
   return TELEGRAM_MD_CHARS.includes(ch);
