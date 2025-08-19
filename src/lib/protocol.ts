@@ -118,13 +118,41 @@ export async function searchBoardCards(input: Api.TypeInputPeer, queryLimit = 10
 	const usersMap: Record<string, any> = {};
 	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
 	const items: BoardMeta[] = [];
+	const seenMsgIds = new Set<number>();
 	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 	for (const m of messages) {
 		const parsed = parseBoardCard(m.message ?? '');
 		if (!parsed) continue;
+		const msgId = Number(m.id);
+		seenMsgIds.add(msgId);
 		const creatorUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
-		items.push({ id: parsed.id, messageId: Number(m.id), creatorUserId, date: Number(m.date), title: parsed.data.title, description: parsed.data.description });
+		items.push({ id: parsed.id, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title, description: parsed.data.description });
 	}
+
+	// Fallback: scan recent history for fresh board cards not yet indexed by search
+	if (items.length === 0) {
+		let offsetId = 0;
+		const pageSize = Math.min(100, queryLimit);
+		let pages = 0;
+		while (items.length < queryLimit && pages < 30) {
+			const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, offsetId, addOffset: 0, limit: pageSize }));
+			const batch: any[] = (page.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			if (!batch.length) break;
+			for (const m of batch) {
+				const msgId = Number(m.id);
+				if (seenMsgIds.has(msgId)) continue;
+				const parsed = parseBoardCard(m.message ?? '');
+				if (!parsed) continue;
+				const creatorUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+				seenMsgIds.add(msgId);
+				items.push({ id: parsed.id, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title, description: parsed.data.description });
+				if (items.length >= queryLimit) break;
+			}
+			offsetId = Number(batch[batch.length - 1].id);
+			pages++;
+		}
+	}
+
 	return items;
 }
 
@@ -133,14 +161,43 @@ export async function searchThreadCards(input: Api.TypeInputPeer, parentBoardId:
 	const q = `fg.metadata.thread ${parentBoardId}`;
 	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: queryLimit, filter: new Api.InputMessagesFilterEmpty() }));
 	const items: ThreadMeta[] = [];
+	const seenMsgIds = new Set<number>();
 	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
 	for (const m of messages) {
 		const parsed = parseThreadCard(m.message ?? '');
 		if (!parsed) continue;
 		if (parsed.parentBoardId !== parentBoardId) continue;
+		const msgId = Number(m.id);
+		seenMsgIds.add(msgId);
 		const creatorUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
-		items.push({ id: parsed.id, parentBoardId, messageId: Number(m.id), creatorUserId, date: Number(m.date), title: parsed.data.title });
+		items.push({ id: parsed.id, parentBoardId, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title });
 	}
+
+	// Fallback: scan recent history for thread cards belonging to this board
+	if (items.length === 0) {
+		let offsetId = 0;
+		const pageSize = Math.min(100, queryLimit);
+		let pages = 0;
+		while (items.length < queryLimit && pages < 30) {
+			const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, offsetId, addOffset: 0, limit: pageSize }));
+			const batch: any[] = (page.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+			if (!batch.length) break;
+			for (const m of batch) {
+				const msgId = Number(m.id);
+				if (seenMsgIds.has(msgId)) continue;
+				const parsed = parseThreadCard(m.message ?? '');
+				if (!parsed) continue;
+				if (parsed.parentBoardId !== parentBoardId) continue;
+				const creatorUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+				seenMsgIds.add(msgId);
+				items.push({ id: parsed.id, parentBoardId, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title });
+				if (items.length >= queryLimit) break;
+			}
+			offsetId = Number(batch[batch.length - 1].id);
+			pages++;
+		}
+	}
+
 	return items;
 }
 
