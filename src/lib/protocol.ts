@@ -2,15 +2,15 @@ import { Api } from 'telegram';
 import { getClient } from '@lib/telegram/client';
 
 export interface BoardMeta {
-	// Permanent ID (hash)
+	// Permanent ID (hash).
 	id: string;
-	// Telegram message id that carries this metadata card
+	// Telegram message id that carries this metadata card.
 	messageId: number;
-	// User id of creator
+	// User id of creator.
 	creatorUserId?: number;
-	// Epoch seconds
+	// Epoch seconds.
 	date?: number;
-	// User content
+	// User content.
 	title: string;
 	description?: string;
 }
@@ -32,12 +32,12 @@ export interface PostCard {
 	user?: any;
 	date?: number;
 	content: string;
-	media?: any; // raw GramJS media for reuse when editing
+	media?: any; // raw GramJS media for reuse when editing.
 	groupedId?: string;
 }
 
 export function generateIdHash(length: number = 16): string {
-	// Generate base64url string without padding
+	// Generate base64url string without padding.
 	const bytes = new Uint8Array(length);
 	crypto.getRandomValues(bytes);
 	let binary = '';
@@ -47,6 +47,48 @@ export function generateIdHash(length: number = 16): string {
 }
 
 // ---- Compose / Parse helpers ----
+
+/**
+ * Escapes post content for ForumGram prior to JSON serialization so that Telegram/Markdown
+ * special characters do not alter formatting when the message is stored and later rendered.
+ *
+ * Transformation (before JSON):
+ *   * ~ ` _ -> prefix with a single backslash if not already escaped.
+ *   \\ -> double every existing backslash to preserve user-intended escapes.
+ * Double-quotes are left untouched here; JSON serialization will escape them.
+ */
+export function escapePostContentForForumGram(input: string): string {
+	if (!input) return '';
+	// Greedy: first double original backslashes.
+	let out = input.replace(/\\/g, '\\\\');
+	// Then map special characters to ForumGram tokens.
+	out = out.replace(/\*/g, '\\ast');
+	out = out.replace(/~/g, '\\til');
+	out = out.replace(/`/g, '\\btk');
+	out = out.replace(/_/g, '\\und');
+	return out;
+}
+
+/**
+ * Reverses ForumGram escaping after JSON parsing to restore the author's original content.
+ *
+ * Steps (after JSON parse):
+ *   1) For runs of backslashes immediately before a special char (* ~ ` _), remove one
+ *      backslash if the run length is odd (undo the single prefix added during escaping).
+ *   2) Collapse doubled backslashes to single backslashes (undo backslash doubling).
+ */
+export function unescapePostContentFromForumGram(input: string): string {
+	if (!input) return '';
+	let out = input;
+	// Reverse token mapping first to avoid touching token backslashes when collapsing doubles.
+	out = out.replace(/\\ast/g, '*');
+	out = out.replace(/\\til/g, '~');
+	out = out.replace(/\\btk/g, '`');
+	out = out.replace(/\\und/g, '_');
+	// Finally, collapse doubled backslashes back to a single backslash.
+	out = out.replace(/\\\\/g, '\\');
+	return out;
+}
 
 export function composeBoardCard(id: string, data: { title: string; description?: string }): string {
 	const payload = JSON.stringify({ title: data.title, description: data.description ?? '' });
@@ -90,7 +132,8 @@ export function parseThreadCard(text: string): { id: string; parentBoardId: stri
 }
 
 export function composePostCard(id: string, parentThreadId: string, data: { content: string }): string {
-	const payload = JSON.stringify({ content: data.content });
+	const escapedContent = escapePostContentForForumGram(data.content);
+	const payload = JSON.stringify({ content: escapedContent });
 	return `fg.post\n${id}\nparent:${parentThreadId}\n${payload}`;
 }
 
@@ -105,7 +148,8 @@ export function parsePostCard(text: string): { id: string; parentThreadId: strin
 	try {
 		const jsonStr = lines.slice(3).join('\n');
 		const obj = JSON.parse(jsonStr);
-		return { id, parentThreadId, data: { content: obj.content ?? '' } };
+		const restoredContent = unescapePostContentFromForumGram(obj.content ?? '');
+		return { id, parentThreadId, data: { content: restoredContent } };
 	} catch {
 		return null;
 	}
@@ -130,7 +174,7 @@ export async function searchBoardCards(input: Api.TypeInputPeer, queryLimit = 10
 		items.push({ id: parsed.id, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title, description: parsed.data.description });
 	}
 
-	// Fallback: scan recent history for additional board cards not yet indexed by search
+	// Fallback: scan recent history for additional board cards not yet indexed by search.
 	if (items.length < queryLimit) {
 		let offsetId = 0;
 		const pageSize = Math.min(100, queryLimit);
@@ -174,7 +218,7 @@ export async function searchThreadCards(input: Api.TypeInputPeer, parentBoardId:
 		items.push({ id: parsed.id, parentBoardId, messageId: msgId, creatorUserId, date: Number(m.date), title: parsed.data.title });
 	}
 
-	// Fallback: scan recent history for additional thread cards belonging to this board
+	// Fallback: scan recent history for additional thread cards belonging to this board.
 	if (items.length < queryLimit) {
 		let offsetId = 0;
 		const pageSize = Math.min(100, queryLimit);
@@ -221,7 +265,7 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 	}
 
-	// Fallback: also scan recent history to merge very fresh posts (handles indexing/tokenization delays)
+	// Fallback: also scan recent history to merge very fresh posts (handles indexing/tokenization delays).
 	if (items.length < queryLimit) {
 		let offsetId = 0;
 		const pageSize = Math.min(100, queryLimit);
@@ -242,7 +286,7 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 				items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 				if (items.length >= queryLimit) break;
 			}
-			// pagination: next offset is the last message id in this batch
+			// pagination: next offset is the last message id in this batch.
 			offsetId = Number(batch[batch.length - 1].id);
 			pages++;
 		}
