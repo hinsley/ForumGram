@@ -20,9 +20,10 @@ export interface DisplayMessage {
 	avatarUrl?: string;
 	activityCount?: number;
 	attachments?: AttachmentMeta[];
+	canEdit?: boolean;
 }
 
-export default function MessageItem({ msg }: { msg: DisplayMessage }) {
+export default function MessageItem({ msg, onEdit }: { msg: DisplayMessage; onEdit?: (msg: DisplayMessage) => void }) {
 	const dateObj = new Date(msg.date * 1000);
 	const datePart = format(dateObj, 'd MMMM yyyy');
 	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
@@ -115,7 +116,10 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 				)}
 			</div>
 			<div className="post-body">
-				<div className="post-meta">Posted {postedAt}</div>
+				<div className="post-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+					<div>Posted {postedAt}</div>
+					{msg.canEdit ? <button className="btn ghost" onClick={() => onEdit && onEdit(msg)}>Edit</button> : null}
+				</div>
 				<div className="post-content"><MarkdownView text={msg.text} /></div>
 				{Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
 					<div className="post-attachments" style={{ marginTop: 8 }}>

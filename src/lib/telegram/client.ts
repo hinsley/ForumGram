@@ -149,3 +149,80 @@ export async function editMessage(input: Api.TypeInputPeer, messageId: number, m
 	const res = await client.invoke(new Api.messages.EditMessage({ peer: input, id: messageId, message, entities } as any));
 	return res;
 }
+
+export async function sendMediaMessage(
+	input: Api.TypeInputPeer,
+	message: string,
+	media: Api.TypeInputMedia,
+	entities?: any[],
+) {
+	const client = await getClient();
+	const res = await client.invoke(new Api.messages.SendMedia({
+		peer: input,
+		media,
+		message,
+		entities,
+	} as any));
+	return res as any;
+}
+
+export async function sendMultiMediaMessage(
+	input: Api.TypeInputPeer,
+	message: string,
+	media: Api.TypeInputMedia[],
+	entities?: any[],
+) {
+	const client = await getClient();
+	const multi: any[] = media.map((m) => new Api.InputSingleMedia({ media: m, randomId: BigInt(Date.now()) } as any));
+	// Attach message as caption to the first item for best compatibility
+	if (multi.length > 0) {
+		(multi[0] as any).message = message;
+		(multi[0] as any).entities = entities;
+	}
+	const res = await client.invoke(new Api.messages.SendMultiMedia({
+		peer: input,
+		multiMedia: multi,
+	} as any));
+	return res as any;
+}
+
+export async function sendMediaMessageToTopic(
+	input: Api.TypeInputPeer,
+	topicId: number,
+	message: string,
+	media: Api.TypeInputMedia,
+	entities?: any[],
+) {
+	const client = await getClient();
+	const res = await client.invoke(new Api.messages.SendMedia({
+		peer: input,
+		media,
+		message,
+		replyTo: new Api.InputReplyToMessage({ replyToMsgId: topicId, topMsgId: topicId }) as any,
+		// @ts-expect-error supported in GramJS for forum
+		topMsgId: topicId,
+		entities,
+	} as any));
+	return res as any;
+}
+
+export async function sendMultiMediaMessageToTopic(
+	input: Api.TypeInputPeer,
+	topicId: number,
+	message: string,
+	media: Api.TypeInputMedia[],
+	entities?: any[],
+) {
+	const client = await getClient();
+	const multi: any[] = media.map((m) => new Api.InputSingleMedia({ media: m, randomId: BigInt(Date.now()) } as any));
+	const res = await client.invoke(new Api.messages.SendMultiMedia({
+		peer: input,
+		multiMedia: multi,
+		message,
+		replyTo: new Api.InputReplyToMessage({ replyToMsgId: topicId, topMsgId: topicId }) as any,
+		// @ts-expect-error supported in GramJS for forum
+		topMsgId: topicId,
+		entities,
+	} as any));
+	return res as any;
+}
