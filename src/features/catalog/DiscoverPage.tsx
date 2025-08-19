@@ -26,10 +26,13 @@ export default function DiscoverPage() {
 			const handle = input.startsWith('@') ? input.slice(1) : input;
 			const res: any = await resolveForum('@' + handle);
 			setResult(res);
-			// Attempt to locate channel info
+			// Attempt to locate chat/channel info
 			const channel = (res.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
+			const chat = (res.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
 			if (channel) {
 				addOrUpdateForum({ id: Number(channel.id), title: channel.title, username: handle, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
+			} else if (chat) {
+				addOrUpdateForum({ id: Number(chat.id), title: chat.title, username: handle, accessHash: undefined, isForum: false, isPublic: Boolean(handle) });
 			}
 		} catch (e: any) {
 			setError(e?.message ?? 'Failed to resolve');
@@ -39,8 +42,10 @@ export default function DiscoverPage() {
 	function onOpen() {
 		try {
 			const channel = (result?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-			if (!channel) throw new Error('No channel in result');
-			navigate(`/forum/${Number(channel.id)}`);
+			const chat = (result?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
+			const id = channel ? Number(channel.id) : (chat ? Number(chat.id) : null);
+			if (!id) throw new Error('No suitable chat in result');
+			navigate(`/forum/${id}`);
 		} catch (e: any) {
 			setError(e?.message ?? 'Cannot open forum');
 		}
@@ -53,9 +58,15 @@ export default function DiscoverPage() {
 			const handle = address.startsWith('@') ? address.slice(1) : address;
 			const res: any = await resolveForum('@' + handle);
 			const channel = (res.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-			if (!channel) throw new Error('No channel in result');
-			addOrUpdateForum({ id: Number(channel.id), title: channel.title, username: handle, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
-			navigate(`/forum/${Number(channel.id)}`);
+			const chat = (res.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
+			const id = channel ? Number(channel.id) : (chat ? Number(chat.id) : null);
+			if (!id) throw new Error('No suitable chat in result');
+			if (channel) {
+				addOrUpdateForum({ id, title: channel.title, username: handle, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
+			} else if (chat) {
+				addOrUpdateForum({ id, title: chat.title, username: handle, accessHash: undefined, isForum: false, isPublic: Boolean(handle) });
+			}
+			navigate(`/forum/${id}`);
 		} catch (e: any) {
 			setError(e?.message ?? 'Failed to open featured forum');
 		} finally {

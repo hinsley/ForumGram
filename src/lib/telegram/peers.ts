@@ -9,5 +9,8 @@ export function makeInputPeerChannel(channelId: number, accessHash: string | big
 export function getInputPeerForForumId(forumId: number): Api.TypeInputPeer {
 	const meta = useForumsStore.getState().getForum(forumId);
 	if (!meta) throw new Error('Forum not found in store');
-	return makeInputPeerChannel(meta.id, meta.accessHash);
+	if (meta.accessHash !== undefined && meta.accessHash !== null) {
+		return makeInputPeerChannel(meta.id, meta.accessHash);
+	}
+	return new Api.InputPeerChat({ chatId: meta.id } as any);
 }
