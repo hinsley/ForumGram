@@ -20,9 +20,11 @@ export interface DisplayMessage {
 	avatarUrl?: string;
 	activityCount?: number;
 	attachments?: AttachmentMeta[];
+	cardId?: string;
+	authorUserId?: number;
 }
 
-export default function MessageItem({ msg }: { msg: DisplayMessage }) {
+export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete }: { msg: DisplayMessage; canEdit?: boolean; canDelete?: boolean; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void; }) {
 	const dateObj = new Date(msg.date * 1000);
 	const datePart = format(dateObj, 'd MMMM yyyy');
 	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
@@ -42,6 +44,7 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 	}
 
 	const [thumbUrls, setThumbUrls] = useState<(string | undefined)[]>([]);
+	const [menuOpen, setMenuOpen] = useState(false);
 	useEffect(() => {
 		let canceled = false;
 		const cleanups: Array<() => void> = [];
@@ -114,7 +117,26 @@ export default function MessageItem({ msg }: { msg: DisplayMessage }) {
 					<div className="author-activity">Activity: {msg.activityCount}</div>
 				)}
 			</div>
-			<div className="post-body">
+			<div className="post-body" style={{ position: 'relative' }}>
+				{(canEdit || canDelete) && (
+					<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
+						<button className="btn ghost" onClick={() => setMenuOpen((v) => !v)} title="More">⋯</button>
+						{menuOpen && (
+							<div style={{ position: 'absolute', top: 36, right: 0, zIndex: 5 }}>
+								<div className="card" style={{ padding: 8, minWidth: 180 }}>
+									<div className="col" style={{ gap: 6 }}>
+										{canEdit && (
+											<button className="btn" onClick={() => { setMenuOpen(false); onEdit?.(msg); }}>Edit</button>
+										)}
+										{canDelete && (
+											<button className="btn" style={{ background: 'transparent', color: 'var(--danger)' }} onClick={() => { setMenuOpen(false); onDelete?.(msg); }}>Delete</button>
+										)}
+									</div>
+								</div>
+							</div>
+						)}
+					</div>
+				)}
 				<div className="post-meta">Posted {postedAt}</div>
 				<div className="post-content"><MarkdownView text={msg.text} /></div>
 				{Array.isArray(msg.attachments) && msg.attachments.length > 0 && (

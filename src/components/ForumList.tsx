@@ -57,7 +57,7 @@ export default function ForumList() {
 						{openMenuForId === f.id && (
 							<div
 								onClick={(e) => e.stopPropagation()}
-								style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}
+								style={{ position: 'absolute', top: 36, right: 8, zIndex: 5 }}
 							>
 								<div className="card" style={{ padding: 8, minWidth: 180 }}>
 									<div className="col" style={{ gap: 6 }}>
