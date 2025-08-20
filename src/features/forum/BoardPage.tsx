@@ -121,7 +121,25 @@ export default function BoardPage() {
 				text: p.content,
 				threadId: p.parentThreadId,
 				avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
-				attachments: (p as any).media ? [{ name: 'attachment', isMedia: true, media: (p as any).media }] : [],
+				attachments: (() => {
+					const med: any = (p as any).media;
+					if (med && (med.className === 'MessageMediaDocument' || med._ === 'messageMediaDocument')) {
+						const doc: any = med.document ?? {};
+						let name: string | undefined;
+						let mimeType: string | undefined = doc.mimeType ?? doc.mime_type;
+						let sizeBytes: number | undefined = typeof doc.size === 'number' ? doc.size : undefined;
+						if (Array.isArray(doc.attributes)) {
+							for (const attr of doc.attributes) {
+								if (attr.className === 'DocumentAttributeFilename' || attr._ === 'documentAttributeFilename') {
+									name = (attr.fileName ?? attr.file_name) as any;
+									break;
+								}
+							}
+						}
+						return [{ name: name ?? 'file', isMedia: false, media: med, mimeType, sizeBytes }];
+					}
+					return [];
+				})(),
 				groupedId: p.groupedId,
 				cardId: p.id,
 				authorUserId: p.fromUserId,
@@ -188,16 +206,12 @@ export default function BoardPage() {
 	const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
 
 	async function prepareUploadedInputMedia(uploaded: any, file: File): Promise<PreparedInputMedia> {
-		const isImage = file.type?.startsWith('image/') && file.type !== 'image/svg+xml';
-		if (isImage) {
-			const media = new Api.InputMediaUploadedPhoto({ file: uploaded });
-			return { inputMedia: media, name: file.name, mimeType: file.type };
-		}
-		const attrs: any[] = [new Api.DocumentAttributeFilename({ fileName: file.name })];
+		// Always send uploads as files (documents).
+		const attributes: any[] = [new Api.DocumentAttributeFilename({ fileName: file.name })];
 		const media = new Api.InputMediaUploadedDocument({
 			file: uploaded,
 			mimeType: file.type || 'application/octet-stream',
-			attributes: attrs,
+			attributes,
 			forceFile: true,
 		});
 		return { inputMedia: media, name: file.name, mimeType: file.type };
@@ -237,17 +251,6 @@ export default function BoardPage() {
 		await client.invoke(new Api.messages.SendMedia({ peer: input, media, message: caption, randomId: rid as any }));
 	}
 
-	async function sendMultiMediaMessage(input: any, caption: string, mediaList: any[]) {
-		const client = await getClient();
-		const now = Date.now() * 1000;
-		const multiMedia = mediaList.map((m, i) => new Api.InputSingleMedia({
-			media: m,
-			message: i === 0 ? caption : '',
-			randomId: (BigInt(now + i + Math.floor(Math.random() * 1000)) as any),
-		}));
-		await client.invoke(new Api.messages.SendMultiMedia({ peer: input, multiMedia }));
-	}
-
 	async function onSendPost() {
 		try {
 			if (!activeThreadId) return;
@@ -280,14 +283,16 @@ export default function BoardPage() {
 				}
 			} else {
 				const idHash = generateIdHash(16);
-				const text = composePostCard(idHash, activeThreadId, { content: composerText });
-				const prepared = draftAttachments.filter(a => a.prepared && a.status === 'uploaded').map(a => a.prepared!.inputMedia);
+				const prepared = draftAttachments
+					.filter(a => a.prepared && a.status === 'uploaded')
+					.map(a => a.prepared!);
 				if (prepared.length === 0) {
+					const text = composePostCard(idHash, activeThreadId, { content: composerText });
 					await sendPlainMessage(input, text);
-				} else if (prepared.length === 1) {
-					await sendMediaMessage(input, text, prepared[0]!);
-				} else {
-					await sendMultiMediaMessage(input, text, prepared);
+				} else if (prepared.length >= 1) {
+					// Only send the first attachment as a document.
+					const firstText = composePostCard(idHash, activeThreadId, { content: composerText });
+					await sendMediaMessage(input, firstText, prepared[0]!.inputMedia);
 				}
 			}
 
@@ -305,26 +310,26 @@ export default function BoardPage() {
 		const input = document.createElement('input');
 		input.type = 'file';
 		if (accept) input.accept = accept;
-		input.multiple = true;
+		input.multiple = false;
 		input.onchange = async () => {
 			const files = Array.from(input.files || []);
 			if (!files.length) return;
 			const client = await getClient();
-			for (const file of files) {
-				if (opts?.filterOutSvg && file.type === 'image/svg+xml') {
-					// Skip SVG for media mode.
-					continue;
-				}
-				const id = generateIdHash(8);
-				setDraftAttachments(prev => [...prev, { id, file, status: 'uploading', name: file.name, mimeType: file.type }]);
-				try {
-					// @ts-ignore
-					const uploaded = await (client as any).uploadFile({ file, workers: 1 });
-					const prepared = await prepareUploadedInputMedia(uploaded, file);
-					setDraftAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'uploaded', prepared } : a));
-				} catch {
-					setDraftAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error' } : a));
-				}
+			const file = files[0]!;
+			if (opts?.filterOutSvg && file.type === 'image/svg+xml') {
+				// Skip SVG.
+				return;
+			}
+			const id = generateIdHash(8);
+			// Replace any existing attachment with the new one.
+			setDraftAttachments([{ id, file, status: 'uploading', name: file.name, mimeType: file.type }]);
+			try {
+				// @ts-ignore
+				const uploaded = await (client as any).uploadFile({ file, workers: 1 });
+				const prepared = await prepareUploadedInputMedia(uploaded, file);
+				setDraftAttachments([{ id, file, status: 'uploaded', prepared, name: file.name, mimeType: file.type }]);
+			} catch {
+				setDraftAttachments([{ id, file, status: 'error', name: file.name, mimeType: file.type }]);
 			}
 		};
 		input.click();
@@ -336,16 +341,15 @@ export default function BoardPage() {
 			setEditingMessageId(msg.id);
 			setComposerText(msg.text);
 			// Build existing attachments for reuse when composing a new post later.
-			const existing: DraftAttachment[] = [];
-			if (Array.isArray(msg.attachments)) {
-				for (const att of msg.attachments) {
-					try {
-						const prep = await prepareExistingInputMedia(att.media);
-						if (prep) existing.push({ id: generateIdHash(8), status: 'uploaded', prepared: prep, fromExisting: true, name: att.name, mimeType: att.mimeType });
-					} catch {}
-				}
+			let existing: DraftAttachment | null = null;
+			if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+				try {
+					const att = msg.attachments[0];
+					const prep = await prepareExistingInputMedia(att.media);
+					if (prep) existing = { id: generateIdHash(8), status: 'uploaded', prepared: prep, fromExisting: true, name: att.name, mimeType: att.mimeType };
+				} catch {}
 			}
-			setDraftAttachments(existing);
+			setDraftAttachments(existing ? [existing] : []);
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to enter edit mode');
 		}
@@ -443,15 +447,11 @@ export default function BoardPage() {
 								<button className="btn" title="Attach files" onClick={() => triggerFilePick()}>
 									📎
 								</button>
-								<button className="btn" title="Attach images/videos" onClick={() => triggerFilePick('image/jpeg,image/png,image/webp,video/*', { filterOutSvg: true })}>
-									🖼️
-								</button>
 							</div>
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 								<textarea className="textarea" value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder={isEditing ? 'Edit your post...' : 'Write a post...'} />
 								{draftAttachments.length > 0 && (
 									<div style={{ padding: 8, background: '#0b1529', border: '1px solid var(--border)', borderRadius: 8 }}>
-										<div style={{ fontWeight: 600, marginBottom: 6 }}>Attachments</div>
 										<div style={{ display: 'grid', gap: 6 }}>
 											{draftAttachments.map(att => (
 												<div key={att.id} className="row" style={{ alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
