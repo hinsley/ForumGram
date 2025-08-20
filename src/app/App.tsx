@@ -17,9 +17,7 @@ function Header() {
 				<Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>ForumGram</Link>
 			</div>
 			<nav className="header-actions">
-				<NavLink to="/discover" className="btn ghost">Discover</NavLink>
-				<NavLink to="/settings" className="btn ghost">Settings</NavLink>
-				<NavLink to="/backup" className="btn ghost">Backup</NavLink>
+				<NavLink to="/settings" className="btn ghost" title="Settings" aria-label="Settings">⚙️</NavLink>
 				{isAuthenticated ? (
 					<button className="btn" onClick={() => { logout(); navigate('/login'); }}>Logout</button>
 				) : (
