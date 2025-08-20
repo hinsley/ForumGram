@@ -88,8 +88,13 @@ export async function resolveForum(handleOrInvite: string) {
 	if (handleOrInvite.includes('t.me') || handleOrInvite.includes('telegram.me')) {
 		const path = handleOrInvite.split('/').pop() ?? '';
 		if (path.startsWith('+')) {
-			const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: path.slice(1) }));
-			return invite;
+			try {
+				const imported = await client.invoke(new Api.messages.ImportChatInvite({ hash: path.slice(1) }));
+				return imported;
+			} catch (e: any) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: path.slice(1) }));
+				return invite;
+			}
 		}
 		const username = path;
 		const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
@@ -156,3 +161,15 @@ export async function sendMultiMediaMessage(
 }
 
 // Deprecated topic-specific media helpers removed
+
+export async function joinChannelById(channelId: number, accessHash: string | bigint) {
+	const client = await getClient();
+	try {
+		const input = new Api.InputChannel({ channelId, accessHash } as any);
+		await client.invoke(new Api.channels.JoinChannel({ channel: input } as any));
+	} catch (e: any) {
+		const msg: string = String(e?.message || e?.errorMessage || '');
+		if (msg.toUpperCase().includes('USER_ALREADY_PARTICIPANT')) return;
+		throw e;
+	}
+}
