@@ -73,7 +73,7 @@ a:hover { text-decoration: underline; }
 
 /* Composer */
 .composer { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 8px; border-top: 1px solid var(--border); background: #0e1830; }
-.textarea { width: 100%; min-height: 68px; max-height: 240px; resize: vertical; padding: 10px 12px; background: #0b1529; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
+.textarea { width: 100%; min-height: 136px; max-height: 360px; resize: vertical; padding: 10px 12px; background: #0b1529; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
 
 /* Message */
 .message { padding: 10px 12px; }

@@ -14,11 +14,11 @@ interface MarkdownViewProps {
 }
 
 export default function MarkdownView({ text, className }: MarkdownViewProps) {
-	const { markdownEnabled, katexEnabled } = useSettingsStore();
+	const { markdownEnabled, katexEnabled, imageMaxWidthPx } = useSettingsStore();
 	if (!markdownEnabled) {
 		return <pre className={className}>{text}</pre>;
 	}
-	// Preserve math classes through sanitization so rehype-katex can detect them
+	// Preserve math classes through sanitization so rehype-katex can detect them.
 	const sanitizeOptions: any = {
 		...defaultSchema,
 		attributes: {
@@ -30,18 +30,23 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 			span: [
 				...((defaultSchema as any).attributes?.span || []),
 				['className', 'math', 'math-inline'],
-				// allow highlight.js token classes
+				// allow highlight.js token classes.
 				['className', /^hljs.*$/]
 			]
 			,
 			code: [
 				...((defaultSchema as any).attributes?.code || []),
-				// allow language and hljs classes on code
+				// allow language and hljs classes on code.
 				['className', 'hljs', /^language[-_a-z0-9]+$/]
 			],
 			pre: [
 				...((defaultSchema as any).attributes?.pre || []),
 				['className', 'hljs', /^language[-_a-z0-9]+$/]
+			],
+			img: [
+				...((defaultSchema as any).attributes?.img || []),
+				['className'],
+				['style']
 			]
 		}
 	};
@@ -69,6 +74,14 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 								</pre>
 							</div>
 						);
+					},
+					img({ node, ...props }: any) {
+						const style = {
+							maxWidth: `${imageMaxWidthPx}px`,
+							height: 'auto',
+							objectFit: 'contain',
+						} as React.CSSProperties;
+						return <img {...props} style={style} />;
 					}
 				}}
 			>
