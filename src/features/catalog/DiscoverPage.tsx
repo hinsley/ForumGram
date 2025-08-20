@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { resolveForum } from '@lib/telegram/client';
+import { resolveForum, joinChannelById } from '@lib/telegram/client';
 import { useForumsStore } from '@state/forums';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
