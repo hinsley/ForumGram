@@ -11,6 +11,7 @@ import { getAvatarBlob, setAvatarBlob } from '@lib/db';
 import { useSessionStore } from '@state/session';
 import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
+import SidebarToggle from '@components/SidebarToggle';
 
 export default function BoardPage() {
 	const { id, boardId, threadId } = useParams();
@@ -20,7 +21,7 @@ export default function BoardPage() {
 	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 	const me = useSessionStore((s) => s.user);
 	const myUserId = me?.id;
-	const { isSidebarCollapsed, toggleSidebar } = useUiStore();
+	const { isSidebarCollapsed } = useUiStore();
 
 	useEffect(() => { initForums(); }, [initForums]);
 
@@ -396,18 +397,11 @@ export default function BoardPage() {
 	return (
 		<div className="content" style={{ gridTemplateColumns: isSidebarCollapsed ? '16px 1fr' : undefined }}>
 			<aside className="sidebar" style={isSidebarCollapsed ? { padding: 0, borderRight: 'none', overflow: 'hidden' } : undefined}>
-				<button
-					className="btn ghost"
-					onClick={toggleSidebar}
-					title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-					style={{ position: 'fixed', top: '50%', transform: 'translateY(-50%)', left: isSidebarCollapsed ? 8 : 268, padding: 6, zIndex: 20 }}
-				>
-					{isSidebarCollapsed ? '▶' : '◀'}
-				</button>
 				<div className="col" style={isSidebarCollapsed ? { display: 'none' } : undefined}>
 					<ForumList />
 				</div>
 			</aside>
+			<SidebarToggle />
 			<main className="main">
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
