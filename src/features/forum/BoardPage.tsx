@@ -418,8 +418,7 @@ export default function BoardPage() {
 						</div>
 						<div className="row" style={{ alignItems: 'center', marginTop: 8 }}>
 							<h4 style={{ margin: 0 }}>Threads</h4>
-							<div className="spacer" />
-							<button className="btn" onClick={onCreateThread}>New Thread</button>
+							<button className="btn" onClick={onCreateThread}>+</button>
 						</div>
 						{loadingThreads ? (
 							<div style={{ marginTop: 8 }}>Loading...</div>

@@ -91,8 +91,7 @@ export default function ForumPage() {
 					<div className="col">
 						<div className="row" style={{ alignItems: 'center' }}>
 							<h4 style={{ marginTop: 0, marginBottom: 0 }}>Boards</h4>
-							<div className="spacer" />
-							<button className="btn" onClick={onCreateBoard}>New Board</button>
+							<button className="btn" onClick={onCreateBoard}>+</button>
 						</div>
 						{isLoading ? (
 							<div>Loading...</div>
