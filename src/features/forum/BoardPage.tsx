@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
@@ -73,6 +73,9 @@ export default function BoardPage() {
 	});
 
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
+	useEffect(() => {
+		setSelectedThreadId(threadId ?? null);
+	}, [threadId]);
 	const activeThreadId = selectedThreadId;
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
@@ -406,8 +409,11 @@ export default function BoardPage() {
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
 						<div className="row" style={{ alignItems: 'center' }}>
-							<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}`)}>Back</button>
-							<h3 style={{ margin: 0 }}>{forumTitle} &gt; {boardTitle}</h3>
+							<h3 style={{ margin: 0 }}>
+								<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
+								{' > '}
+								<span>{boardTitle}</span>
+							</h3>
 							<div className="spacer" />
 						</div>
 						<div className="row" style={{ alignItems: 'center', marginTop: 8 }}>
@@ -452,8 +458,13 @@ export default function BoardPage() {
 					<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 						<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 							<div className="row" style={{ alignItems: 'center' }}>
-								<button className="btn ghost" onClick={() => { setSelectedThreadId(null); navigate(`/forum/${forumId}/board/${boardId}`); }}>Back</button>
-								<h3 style={{ margin: 0 }}>{`${forumTitle} > ${boardTitle} > ${activeThread ? activeThread.title : 'Thread'}`}</h3>
+								<h3 style={{ margin: 0 }}>
+									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
+									{' > '}
+									<Link to={`/forum/${forumId}/board/${boardId}`}>{boardTitle}</Link>
+									{' > '}
+									<span>{activeThread ? activeThread.title : 'Thread'}</span>
+								</h3>
 								<div className="spacer" />
 							</div>
 						</div>
