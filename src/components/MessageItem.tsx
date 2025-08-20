@@ -141,10 +141,6 @@ export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete 
 				)}
 				<div className="post-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
 					<div>Posted {postedAt}</div>
-					<div style={{ display: 'flex', gap: 8 }}>
-						{canEdit ? <button className="btn ghost" onClick={() => onEdit?.(msg)}>Edit</button> : null}
-						{canDelete ? <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={() => onDelete?.(msg)}>Delete</button> : null}
-					</div>
 				</div>
 	            <div className="post-content"><MarkdownView text={msg.text} /></div>
 	            {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (

@@ -22,6 +22,29 @@ export default function BoardPage() {
 
 	useEffect(() => { initForums(); }, [initForums]);
 
+	// Resolve current user id even if the session store has not populated yet.
+	const [resolvedUserId, setResolvedUserId] = useState<number | undefined>(typeof myUserId === 'number' ? myUserId : undefined);
+	useEffect(() => {
+		let canceled = false;
+		(async () => {
+			try {
+				if (typeof myUserId === 'number') { setResolvedUserId(myUserId); return; }
+				const client = await getClient();
+				const meObj: any = await (client as any).getMe();
+				const raw = (meObj && (meObj.id ?? meObj.user?.id));
+				let idNum: number | undefined = undefined;
+				if (typeof raw === 'number') idNum = raw;
+				else if (typeof raw === 'bigint') idNum = Number(raw);
+				else if (raw && typeof raw.toNumber === 'function') idNum = raw.toNumber();
+				else if (raw && typeof raw.toJSNumber === 'function') idNum = raw.toJSNumber();
+				else if (raw && typeof raw.value === 'number') idNum = raw.value;
+				else if (typeof raw === 'string' && /^\d+$/.test(raw)) idNum = Number(raw);
+				if (!canceled) setResolvedUserId(idNum);
+			} catch {}
+		})();
+		return () => { canceled = true; };
+	}, [myUserId]);
+
 	const { data: boardMeta } = useQuery<{ title?: string; description?: string } | null>({
 		queryKey: ['board-meta', forumId, boardId],
 		queryFn: async () => {
@@ -102,8 +125,8 @@ export default function BoardPage() {
 				groupedId: p.groupedId,
 				cardId: p.id,
 				authorUserId: p.fromUserId,
-				canEdit: Boolean(myUserId && p.fromUserId && myUserId === p.fromUserId),
-				canDelete: Boolean(myUserId && p.fromUserId && myUserId === p.fromUserId),
+				canEdit: false,
+				canDelete: false,
 			}));
 			mapped.sort((a, b) => a.date - b.date);
 			return mapped as any[];
@@ -332,6 +355,13 @@ export default function BoardPage() {
 		setDraftAttachments(prev => prev.filter(a => a.id !== id));
 	}
 
+	function cancelEditing() {
+		setIsEditing(false);
+		setEditingMessageId(null);
+		setComposerText('');
+		setDraftAttachments([]);
+	}
+
 	async function onDeletePost(msg: any) {
 		try {
 			if (!confirm('Delete this post?')) return;
@@ -405,7 +435,7 @@ export default function BoardPage() {
 						</div>
 						<div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
 							{loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-								<MessageList messages={posts as any[]} currentUserId={myUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
+								<MessageList messages={posts as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
 							)}
 						</div>
 						<div className="composer">
@@ -439,10 +469,13 @@ export default function BoardPage() {
 									</div>
 								)}
 							</div>
-							<div className="col" style={{ display: 'flex', alignItems: 'flex-start' }}>
-								<button className="btn primary" onClick={onSendPost} disabled={!composerText.trim() || !activeThreadId}>
-									{isEditing ? 'Save' : 'Post'}
+							<div className="col" style={{ display: 'flex', alignItems: 'stretch', flexDirection: 'column', gap: 8 }}>
+								<button className="btn primary" onClick={onSendPost} disabled={!composerText.trim() || !activeThreadId} style={{ justifyContent: 'center', width: '100%' }}>
+									{isEditing ? 'Edit' : 'Post'}
 								</button>
+								{isEditing ? (
+									<button className="btn ghost" style={{ color: 'var(--danger)', justifyContent: 'center', width: '100%' }} onClick={cancelEditing}>Cancel</button>
+								) : null}
 							</div>
 						</div>
 					</div>
