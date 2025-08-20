@@ -72,6 +72,7 @@ export default function BoardPage() {
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
 	const activeThreadId = selectedThreadId;
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
+	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
 
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
 		queryKey: ['posts', forumId, boardId, activeThreadId],
@@ -417,11 +418,26 @@ export default function BoardPage() {
 						) : (
 							<div className="gallery boards" style={{ marginTop: 12 }}>
 								{threads.map((t) => (
-									<div key={t.id} className="chiclet" onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}`); }}>
+									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}`); }}>
 										<div className="title">{t.title}</div>
-										<div className="row" style={{ gap: 8, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
-											<button className="btn ghost" onClick={() => onEditThread(t)}>Edit</button>
-											<button className="btn ghost" onClick={() => onDeleteThread(t)}>Delete</button>
+										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
+											<button
+												className="btn ghost"
+												onClick={() => setOpenMenuForThreadId(openMenuForThreadId === t.id ? null : t.id)}
+												title="More"
+											>
+												⋯
+											</button>
+											{openMenuForThreadId === t.id && (
+												<div style={{ position: 'absolute', top: 36, right: 0, zIndex: 5 }}>
+													<div className="card" style={{ padding: 8, minWidth: 180 }}>
+														<div className="col" style={{ gap: 6 }}>
+															<button className="btn" onClick={() => { setOpenMenuForThreadId(null); onEditThread(t); }}>Edit</button>
+															<button className="btn" style={{ background: 'transparent', color: 'var(--danger)' }} onClick={() => { setOpenMenuForThreadId(null); onDeleteThread(t); }}>Delete</button>
+														</div>
+													</div>
+												</div>
+											)}
 										</div>
 									</div>
 								))}
