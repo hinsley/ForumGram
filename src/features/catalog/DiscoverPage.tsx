@@ -4,6 +4,7 @@ import { useForumsStore } from '@state/forums';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
 import FeaturedForums from '@features/catalog/FeaturedForums';
+import { useUiStore } from '@state/ui';
 
 export default function DiscoverPage() {
 	const [query, setQuery] = useState('');
@@ -15,6 +16,7 @@ export default function DiscoverPage() {
 	const navigate = useNavigate();
 	const [searchParams] = useSearchParams();
 	const addMode = searchParams.get('add') === '1';
+	const { isSidebarCollapsed, toggleSidebar } = useUiStore();
 
 	useEffect(() => { initForums(); }, [initForums]);
 
@@ -26,7 +28,7 @@ export default function DiscoverPage() {
 			const handle = input.startsWith('@') ? input.slice(1) : input;
 			const res: any = await resolveForum('@' + handle);
 			setResult(res);
-			// Attempt to locate chat/channel info
+			// Attempt to locate chat/channel info.
 			const channel = (res.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
 			const chat = (res.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
 			if (channel) {
@@ -75,9 +77,17 @@ export default function DiscoverPage() {
 	}
 
 	return (
-		<div className="content">
-			<aside className="sidebar">
-				<div className="col">
+		<div className="content" style={{ gridTemplateColumns: isSidebarCollapsed ? '16px 1fr' : undefined }}>
+			<aside className="sidebar" style={isSidebarCollapsed ? { padding: 0, borderRight: 'none', overflow: 'hidden' } : undefined}>
+				<button
+					className="btn ghost"
+					onClick={toggleSidebar}
+					title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+					style={{ position: 'fixed', top: '50%', transform: 'translateY(-50%)', left: isSidebarCollapsed ? 8 : 268, padding: 6, zIndex: 20 }}
+				>
+					{isSidebarCollapsed ? '▶' : '◀'}
+				</button>
+				<div className="col" style={isSidebarCollapsed ? { display: 'none' } : undefined}>
 					<ForumList />
 				</div>
 			</aside>

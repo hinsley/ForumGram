@@ -6,6 +6,7 @@ import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash } from '@lib/protocol';
 import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
+import { useUiStore } from '@state/ui';
 
 export default function ForumPage() {
 	const { id } = useParams();
@@ -14,6 +15,7 @@ export default function ForumPage() {
 	const initForums = useForumsStore((s) => s.initFromStorage);
 	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 	const [openMenuForBoardId, setOpenMenuForBoardId] = useState<string | null>(null);
+	const { isSidebarCollapsed, toggleSidebar } = useUiStore();
 
 	useEffect(() => { initForums(); }, [initForums]);
 	const { data, isLoading, error, refetch } = useQuery({
@@ -75,9 +77,19 @@ export default function ForumPage() {
 	}
 
 	return (
-		<div className="content">
-			<aside className="sidebar">
-				<ForumList />
+		<div className="content" style={{ gridTemplateColumns: isSidebarCollapsed ? '16px 1fr' : undefined }}>
+			<aside className="sidebar" style={isSidebarCollapsed ? { padding: 0, borderRight: 'none', overflow: 'hidden' } : undefined}>
+				<button
+					className="btn ghost"
+					onClick={toggleSidebar}
+					title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+					style={{ position: 'fixed', top: '50%', transform: 'translateY(-50%)', left: isSidebarCollapsed ? 8 : 268, padding: 6, zIndex: 20 }}
+				>
+					{isSidebarCollapsed ? '▶' : '◀'}
+				</button>
+				<div className="col" style={isSidebarCollapsed ? { display: 'none' } : undefined}>
+					<ForumList />
+				</div>
 			</aside>
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
