@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, searchThreadCards, searchPostCardsSlice, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread, countPostsForThread } from '@lib/protocol';
+import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -103,41 +103,43 @@ export default function BoardPage() {
 		}
 	}, [threadId, pageParam, forumId, boardId, navigate]);
 
-	const { data: totalPostCount = 0, refetch: refetchPostCount } = useQuery<number>({
-		queryKey: ['post-count', forumId, boardId, activeThreadId],
+	const { data: allCards = [] as any[] , refetch: refetchAllCards, isLoading: loadingAllCards, error: allCardsError } = useQuery({
+		queryKey: ['all-post-cards', forumId, boardId, activeThreadId],
 		queryFn: async () => {
-			if (!activeThreadId) return 0;
+			if (!activeThreadId) return [] as any[];
 			const input = getInputPeerForForumId(forumId);
-			const count = await countPostsForThread(input, String(activeThreadId));
-			return count;
+			const items = await searchPostCards(input, String(activeThreadId), 2000);
+			// Sort ascending by date so we can slice by page in oldest->newest order
+			items.sort((a: any, b: any) => (a.date ?? 0) - (b.date ?? 0));
+			return items as any[];
 		},
 		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
 		staleTime: 5_000,
 	});
 
-	const totalPages = Math.max(1, Math.ceil((totalPostCount || 0) / pageSize));
+	const totalPages = useMemo(() => {
+		const N = Array.isArray(allCards) ? allCards.length : 0;
+		return Math.max(1, Math.ceil(N / pageSize));
+	}, [allCards, pageSize]);
 
 	useEffect(() => {
 		if (!threadId) return;
 		if (!pageParam) return;
-		if ((totalPostCount || 0) > 0 && currentPage > totalPages) {
+		if (currentPage > totalPages) {
 			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${totalPages}`);
 		}
-	}, [currentPage, totalPages, totalPostCount, threadId, pageParam, forumId, boardId, navigate]);
+	}, [currentPage, totalPages, threadId, pageParam, forumId, boardId, navigate]);
 
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
-		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
+		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, (allCards as any[]).length],
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
-			const N = totalPostCount || 0;
-			const startIndex = (currentPage - 1) * pageSize;
-			const endExclusive = Math.min(startIndex + pageSize, Math.max(0, N));
-			const limit = Math.max(0, endExclusive - startIndex);
-			const addOffset = Math.max(0, N - endExclusive);
-			const input = getInputPeerForForumId(forumId);
-			const items = await searchPostCardsSlice(input, String(activeThreadId), addOffset, limit);
+			const cards = Array.isArray(allCards) ? allCards : [];
+			const startIndex = Math.max(0, (currentPage - 1) * pageSize);
+			const endExclusive = Math.min(cards.length, startIndex + pageSize);
+			const slice = cards.slice(startIndex, endExclusive);
 			// Build author map and load avatars once per unique user.
-			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
+			const uniqueUserIds = Array.from(new Set(slice.map((p: any) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
 			const userIdToUrl: Record<number, string | undefined> = {};
 			for (const uid of uniqueUserIds) {
@@ -147,7 +149,7 @@ export default function BoardPage() {
 						userIdToUrl[uid] = URL.createObjectURL(cached);
 						continue;
 					}
-					let userObj = items.find((p) => p.fromUserId === uid)?.user;
+					let userObj = slice.find((p: any) => p.fromUserId === uid)?.user;
 					if (!userObj) {
 						try {
 							userObj = await (client as any).getEntity(uid);
@@ -171,7 +173,7 @@ export default function BoardPage() {
 				}
 			}
 			// Map to display messages, preserving metadata used by both branches.
-			const mapped = items.map((p) => ({
+			const mapped = slice.map((p: any) => ({
 				id: p.messageId,
 				from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
 				date: p.date ?? 0,
@@ -206,7 +208,7 @@ export default function BoardPage() {
 			mapped.sort((a, b) => a.date - b.date);
 			return mapped as any[];
 		},
-		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && (typeof totalPostCount === 'number'),
+		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && Array.isArray(allCards),
 		staleTime: 5_000,
 	});
 
@@ -359,7 +361,7 @@ export default function BoardPage() {
 			setDraftAttachments([]);
 			setIsEditing(false);
 			setEditingMessageId(null);
-			setTimeout(() => { refetchPosts(); refetchPostCount(); }, 250);
+			setTimeout(() => { refetchAllCards(); refetchPosts(); }, 250);
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to send post');
 		}
@@ -440,7 +442,7 @@ export default function BoardPage() {
 				} catch {}
 			}
 			await deleteMessages(input, ids);
-			setTimeout(() => { refetchPosts(); refetchPostCount(); }, 250);
+			setTimeout(() => { refetchAllCards(); refetchPosts(); }, 250);
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to delete post');
 		}
