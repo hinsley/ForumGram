@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import LoginPage from '@features/auth/LoginPage';
 import DiscoverPage from '@features/catalog/DiscoverPage';
@@ -5,7 +6,6 @@ import ForumPage from '@features/forum/ForumPage';
 import SettingsPage from '@features/settings/SettingsPage';
 import { useSessionStore } from '@state/session';
 import BoardPage from '@features/forum/BoardPage';
-import { useEffect } from 'react';
 import { useSettingsStore } from '@state/settings';
 
 function Header() {
@@ -38,15 +38,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 	return <>{children}</>;
 }
 
-function ErrorBoundary({ children }: { children: React.ReactNode }) {
-	return (
-		<ErrorBoundaryImpl>
-			{children}
-		</ErrorBoundaryImpl>
-	);
-}
-
-class ErrorBoundaryImpl extends (window as any).React?.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
 	constructor(props: any) {
 		super(props);
 		this.state = { hasError: false };
