@@ -15,7 +15,10 @@ import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
 
 export default function BoardPage() {
-	const { id, boardId, threadId, page: pageParam } = useParams();
+	const { id, boardId, threadId } = useParams();
+	// Extend to capture optional page when present in route
+	// @ts-ignore
+	const { page: pageParam } = useParams();
 	const forumId = Number(id);
 	const navigate = useNavigate();
 	const initForums = useForumsStore((s) => s.initFromStorage);
@@ -97,7 +100,8 @@ export default function BoardPage() {
 
 	// Pagination derived from URL
 	const pageSize = 10;
-	const currentPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+	const pageFromUrl = Number(pageParam);
+	const currentPage = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
 
 	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
 	useEffect(() => {
@@ -123,12 +127,10 @@ export default function BoardPage() {
 	useEffect(() => {
 		if (!activeThreadId) return;
 		if (!pageParam) return;
-		// Wait for count to load (totalPages computed from totalPostCount)
-		// Avoid redirecting to page 1 before we know the true total
-		if (totalPostCount > 0 && currentPage > totalPages) {
+		if (currentPage > totalPages) {
 			navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${totalPages}`);
 		}
-	}, [currentPage, totalPages, totalPostCount, activeThreadId, pageParam, forumId, boardId, navigate]);
+	}, [currentPage, totalPages, activeThreadId, pageParam, forumId, boardId, navigate]);
 
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
 		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
@@ -215,7 +217,20 @@ export default function BoardPage() {
 		staleTime: 5_000,
 	});
 
-	// (Removed duplicate recount-and-redirect effect; we rely on totalPostCount-based effect above.)
+	// Keep URL page within bounds once count is known
+	useEffect(() => {
+		if (!activeThreadId) return;
+		(async () => {
+			try {
+				const input = getInputPeerForForumId(forumId);
+				const total = await countPostsForThread(input, String(activeThreadId));
+				const pages = Math.max(1, Math.ceil((total || 0) / pageSize));
+				if (currentPage > pages) {
+					navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${pages}`);
+				}
+			} catch {}
+		})();
+	}, [activeThreadId, currentPage, forumId, boardId, navigate]);
 
 	async function onCreateThread() {
 		try {
@@ -532,10 +547,10 @@ export default function BoardPage() {
 									{currentPage > 1 && (
 										<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`)}>First</button>
 									)}
-									{currentPage > 2 && (
+									{currentPage > 1 && (
 										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.max(1, currentPage - 1)}`)}>Previous</button>
 									)}
-									{currentPage < totalPages - 1 && (
+									{currentPage < totalPages && (
 										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.min(totalPages, currentPage + 1)}`)}>Next</button>
 									)}
 									{currentPage < totalPages && (
