@@ -125,10 +125,11 @@ export default function BoardPage() {
 	useEffect(() => {
 		if (!threadId) return;
 		if (!pageParam) return;
+		if (loadingAllCards) return; // wait until we know total pages
 		if (currentPage > totalPages) {
 			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${totalPages}`);
 		}
-	}, [currentPage, totalPages, threadId, pageParam, forumId, boardId, navigate]);
+	}, [currentPage, totalPages, threadId, pageParam, forumId, boardId, navigate, loadingAllCards]);
 
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
 		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, (allCards as any[]).length],
@@ -208,7 +209,7 @@ export default function BoardPage() {
 			mapped.sort((a, b) => a.date - b.date);
 			return mapped as any[];
 		},
-		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && Array.isArray(allCards),
+		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && !loadingAllCards,
 		staleTime: 5_000,
 	});
 
