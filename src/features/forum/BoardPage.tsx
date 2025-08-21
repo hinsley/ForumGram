@@ -15,10 +15,7 @@ import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
 
 export default function BoardPage() {
-	const { id, boardId, threadId } = useParams();
-	// Extend to capture optional page when present in route
-	// @ts-ignore
-	const { page: pageParam } = useParams();
+	const { id, boardId, threadId, page: pageParam } = useParams();
 	const forumId = Number(id);
 	const navigate = useNavigate();
 	const initForums = useForumsStore((s) => s.initFromStorage);
@@ -100,8 +97,7 @@ export default function BoardPage() {
 
 	// Pagination derived from URL
 	const pageSize = 10;
-	const pageFromUrl = Number(pageParam);
-	const currentPage = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
+	const currentPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
 	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
 	useEffect(() => {
@@ -547,10 +543,10 @@ export default function BoardPage() {
 									{currentPage > 1 && (
 										<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`)}>First</button>
 									)}
-									{currentPage > 1 && (
+									{currentPage > 2 && (
 										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.max(1, currentPage - 1)}`)}>Previous</button>
 									)}
-									{currentPage < totalPages && (
+									{currentPage < totalPages - 1 && (
 										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.min(totalPages, currentPage + 1)}`)}>Next</button>
 									)}
 									{currentPage < totalPages && (
