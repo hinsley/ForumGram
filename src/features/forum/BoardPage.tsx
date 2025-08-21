@@ -138,10 +138,12 @@ export default function BoardPage() {
 			const N = totalPostCount || 0;
 			const startIndex = (currentPage - 1) * pageSize;
 			const endExclusive = Math.min(startIndex + pageSize, Math.max(0, N));
-			const limit = Math.max(0, endExclusive - startIndex);
-			const addOffset = Math.max(0, N - endExclusive);
+			// If we're on the last page, always ask for full pageSize from the newest edge (addOffset=0)
+			const isLastPage = currentPage >= Math.max(1, Math.ceil((N || 0) / pageSize));
+			const effectiveLimit = isLastPage ? pageSize : Math.max(0, endExclusive - startIndex);
+			const effectiveAddOffset = isLastPage ? 0 : Math.max(0, N - endExclusive);
 			const input = getInputPeerForForumId(forumId);
-			const items = await searchPostCardsSlice(input, String(activeThreadId), addOffset, limit);
+			const items = await searchPostCardsSlice(input, String(activeThreadId), effectiveAddOffset, effectiveLimit);
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
