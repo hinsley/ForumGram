@@ -99,7 +99,7 @@ export default function BoardPage() {
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
 
 	// Pagination derived from URL
-	const pageSize = 20;
+	const pageSize = 10;
 	const pageFromUrl = Number(pageParam);
 	const currentPage = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
 
@@ -544,10 +544,19 @@ export default function BoardPage() {
 								</h3>
 								<div className="spacer" />
 								<div className="row" style={{ gap: 6 }}>
-									<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`)} disabled={currentPage <= 1}>First</button>
-									<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.max(1, currentPage - 1)}`)} disabled={currentPage <= 1}>Previous</button>
-									<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.min(totalPages, currentPage + 1)}`)} disabled={currentPage >= totalPages}>Next</button>
-									<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${totalPages}`)} disabled={currentPage >= totalPages}>Last</button>
+									{currentPage > 1 && (
+										<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`)}>First</button>
+									)}
+									{currentPage > 1 && (
+										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.max(1, currentPage - 1)}`)}>Previous</button>
+									)}
+									{currentPage < totalPages && (
+										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.min(totalPages, currentPage + 1)}`)}>Next</button>
+									)}
+									{currentPage < totalPages && (
+										<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${totalPages}`)}>Last</button>
+									)}
+									<div style={{ color: 'var(--muted)', marginLeft: 8 }}>{currentPage}/{totalPages}</div>
 								</div>
 							</div>
 						</div>
