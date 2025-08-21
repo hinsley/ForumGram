@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { getClient } from '@lib/telegram/client';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { Api } from 'telegram';
+import { useSessionStore } from '@state/session';
 
 type ForumAvatarProps = {
 	forumId?: number;
@@ -10,15 +11,17 @@ type ForumAvatarProps = {
 	alt?: string;
 	className?: string;
 	style?: CSSProperties;
+	enableRemote?: boolean; // when false, will not attempt to fetch remotely
 };
 
 const inMemoryUrlCacheByForumId: Map<number, string> = new Map();
 const inMemoryUrlCacheByHandle: Map<string, string> = new Map();
 
 export default function ForumAvatar(props: ForumAvatarProps) {
-	const { forumId, address, size = 28, alt, className, style } = props;
+	const { forumId, address, size = 28, alt, className, style, enableRemote = true } = props;
 	const [url, setUrl] = useState<string | null>(null);
 	const cleanupUrlRef = useRef<string | null>(null);
+	const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
 
 	const normalizedHandle = useMemo(() => {
 		if (!address) return undefined;
@@ -29,6 +32,7 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 		let canceled = false;
 		(async () => {
 			try {
+				if (!enableRemote) { setUrl(null); return; }
 				if (typeof forumId !== 'number' && !normalizedHandle) {
 					setUrl(null);
 					return;
@@ -58,6 +62,8 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 				}
 
 				if (normalizedHandle) {
+					// If not logged in, skip handle-based profile fetch to avoid crashing on discover page.
+					if (!isAuthenticated) { setUrl(null); return; }
 					const cacheKey = normalizedHandle.toLowerCase();
 					const cached = inMemoryUrlCacheByHandle.get(cacheKey);
 					if (cached) { setUrl(cached); return; }
@@ -89,7 +95,7 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 		return () => {
 			canceled = true;
 		};
-	}, [forumId, normalizedHandle]);
+	}, [forumId, normalizedHandle, isAuthenticated, enableRemote]);
 
 	const dimensionStyle: CSSProperties = useMemo(() => ({ width: size, height: size }), [size]);
 
@@ -119,4 +125,3 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 		</div>
 	);
 }
-

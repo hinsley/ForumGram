@@ -38,6 +38,27 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 	return <>{children}</>;
 }
 
+function ErrorBoundary({ children }: { children: React.ReactNode }) {
+	return (
+		<ErrorBoundaryImpl>
+			{children}
+		</ErrorBoundaryImpl>
+	);
+}
+
+class ErrorBoundaryImpl extends (window as any).React?.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+	constructor(props: any) {
+		super(props);
+		this.state = { hasError: false };
+	}
+	static getDerivedStateFromError() { return { hasError: true }; }
+	componentDidCatch(error: any, info: any) { try { console.error('App error:', error, info); } catch {} }
+	render() {
+		if (this.state.hasError) return <div style={{ padding: 16 }}>Something went wrong. Try reloading.</div>;
+		return this.props.children as any;
+	}
+}
+
 export default function App() {
 	const theme = useSettingsStore((s) => s.theme);
 	useEffect(() => {
@@ -46,15 +67,17 @@ export default function App() {
 	return (
 		<div className="app-shell">
 			<Header />
-			<Routes>
-				<Route path="/login" element={<LoginPage />} />
-				<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
-				<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
-				<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
-				<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
-				<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-				<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
-			</Routes>
+			<ErrorBoundary>
+				<Routes>
+					<Route path="/login" element={<LoginPage />} />
+					<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
+					<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
+					<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+					<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+					<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+					<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
+				</Routes>
+			</ErrorBoundary>
 		</div>
 	);
 }
