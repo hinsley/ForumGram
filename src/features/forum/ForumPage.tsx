@@ -9,6 +9,7 @@ import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
+import { getForumAvatarUrl } from '@lib/telegram/client';
 
 export default function ForumPage() {
 	const { id } = useParams();
@@ -18,8 +19,18 @@ export default function ForumPage() {
 	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 	const [openMenuForBoardId, setOpenMenuForBoardId] = useState<string | null>(null);
 	const { isSidebarCollapsed } = useUiStore();
+	const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
 
 	useEffect(() => { initForums(); }, [initForums]);
+	useEffect(() => {
+		let canceled = false;
+		(async () => {
+			if (!Number.isFinite(forumId)) return;
+			const url = await getForumAvatarUrl(forumId, forumMeta?.accessHash);
+			if (!canceled) setAvatarUrl(url);
+		})();
+		return () => { canceled = true; };
+	}, [forumId, forumMeta?.accessHash]);
 	const { data, isLoading, error, refetch } = useQuery({
 		queryKey: ['boards', forumId],
 		queryFn: async () => {
@@ -104,7 +115,14 @@ export default function ForumPage() {
 			<SidebarToggle />
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
-					<h3>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
+					<div className="row" style={{ alignItems: 'center' }}>
+						<div style={{ width: 44, height: 44, borderRadius: 999, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--avatar-bg)' }}>
+							{avatarUrl ? (
+								<img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+							) : null}
+						</div>
+						<h3 style={{ margin: 0 }}>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
+					</div>
 					<div className="col">
 						<div className="row" style={{ alignItems: 'center' }}>
 							<h4 style={{ marginTop: 0, marginBottom: 0 }}>Boards</h4>

@@ -4,6 +4,7 @@ import { StringSession } from 'telegram/sessions';
 import { TG_API_HASH, TG_API_ID } from './constants';
 import { getStoredSessionString } from '@state/session';
 import { computeCheck } from 'telegram/Password';
+import { setForumAvatarBlob, getForumAvatarBlob } from '@lib/db';
 
 let cachedClient: TelegramClient | null = null;
 let connecting: Promise<TelegramClient> | null = null;
@@ -238,4 +239,32 @@ export async function joinPublicByUsername(usernameOrAt: string) {
 		// If already a participant or cannot join (e.g., joining own), proceed to return entity
 	}
 	return channel as any;
+}
+
+export async function getForumAvatarUrl(forumId: number, accessHash?: string | bigint): Promise<string | undefined> {
+	try {
+		const cached = await getForumAvatarBlob(forumId);
+		if (cached) return URL.createObjectURL(cached);
+		const client = await getClient();
+		let entity: any = null;
+		try {
+			if (accessHash !== undefined && accessHash !== null) {
+				const input = new Api.InputPeerChannel({ channelId: forumId, accessHash } as any);
+				entity = await (client as any).getInputEntity(input);
+			} else {
+				entity = await (client as any).getEntity(forumId);
+			}
+		} catch {}
+		if (!entity) return undefined;
+		try {
+			const data: any = await (client as any).downloadProfilePhoto(entity);
+			const blob = data instanceof Blob ? data : new Blob([data]);
+			await setForumAvatarBlob(forumId, blob);
+			return URL.createObjectURL(blob);
+		} catch {
+			return undefined;
+		}
+	} catch {
+		return undefined;
+	}
 }

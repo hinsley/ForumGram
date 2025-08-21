@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useForumsStore } from '@state/forums';
+import { getForumAvatarUrl } from '@lib/telegram/client';
 
 export default function ForumList() {
 	const forums = useForumsStore((s) => s.forums);
@@ -8,6 +9,7 @@ export default function ForumList() {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [openMenuForId, setOpenMenuForId] = useState<number | null>(null);
+	const [avatarUrlById, setAvatarUrlById] = useState<Record<number, string | undefined>>({});
 
 	const items = useMemo(() => {
 		return Object.values(forums)
@@ -18,6 +20,18 @@ export default function ForumList() {
 				return aName.localeCompare(bName);
 			});
 	}, [forums]);
+
+	useEffect(() => {
+		let canceled = false;
+		(async () => {
+			const entries = await Promise.all(items.map(async (f) => {
+				const url = await getForumAvatarUrl(f.id, f.accessHash);
+				return [f.id, url] as const;
+			}));
+			if (!canceled) setAvatarUrlById(Object.fromEntries(entries));
+		})();
+		return () => { canceled = true; };
+	}, [items.map(i => i.id).join(','), items.map(i => String(i.accessHash ?? '')).join(',')]);
 
 	if (items.length === 0) {
 		return (
@@ -42,9 +56,16 @@ export default function ForumList() {
 			<div className="list">
 				{items.map((f) => (
 					<div className="list-item" key={f.id} onClick={() => navigate(`/forum/${f.id}`)} style={{ position: 'relative' }}>
-						<div className="col">
+						<div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+							<div style={{ width: 28, height: 28, borderRadius: 999, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--avatar-bg)' }}>
+								{avatarUrlById[f.id] ? (
+									<img src={avatarUrlById[f.id]} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+								) : null}
+							</div>
+							<div className="col">
 							<div className="title">{f.title ?? (f.username ? `@${f.username}` : `Forum ${f.id}`)}</div>
 							<div className="sub">{f.isPublic ? 'Public' : 'Private'}{f.username ? ` • @${f.username}` : ''}</div>
+							</div>
 						</div>
 						<div className="spacer" />
 						<button
