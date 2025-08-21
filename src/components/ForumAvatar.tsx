@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { getClient } from '@lib/telegram/client';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
+import { Api } from 'telegram';
 
 type ForumAvatarProps = {
 	forumId?: number;
@@ -28,6 +29,10 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 		let canceled = false;
 		(async () => {
 			try {
+				if (typeof forumId !== 'number' && !normalizedHandle) {
+					setUrl(null);
+					return;
+				}
 				if (typeof forumId === 'number') {
 					const cached = inMemoryUrlCacheByForumId.get(forumId);
 					if (cached) { setUrl(cached); return; }
@@ -59,7 +64,7 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 					const client = await getClient();
 					let entity: any = null;
 					try {
-						const res: any = await client.invoke(new (await import('telegram')).Api.contacts.ResolveUsername({ username: normalizedHandle } as any));
+						const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username: normalizedHandle } as any));
 						const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
 						const chat = (res?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
 						entity = channel || chat || null;
