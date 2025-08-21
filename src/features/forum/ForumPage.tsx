@@ -4,10 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
-import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash } from '@lib/protocol';
+import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash, getLastPostForBoard } from '@lib/protocol';
 import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
+import { formatTimeSince } from '@lib/time';
 
 export default function ForumPage() {
 	const { id } = useParams();
@@ -29,6 +30,22 @@ export default function ForumPage() {
 		},
 		enabled: Number.isFinite(forumId),
 	});
+
+	const { data: lastPostByBoardId = {}, isLoading: loadingLastPosts } = useQuery<{ [boardId: string]: any }>({
+		queryKey: ['last-post-by-board', forumId, (data ?? []).map((b) => b.id)],
+		queryFn: async () => {
+			const input = getInputPeerForForumId(forumId);
+			const entries = await Promise.all((data ?? []).map(async (b) => {
+				const lp = await getLastPostForBoard(input, b.id);
+				return [b.id, lp] as const;
+			}));
+			return Object.fromEntries(entries);
+		},
+		enabled: Number.isFinite(forumId) && (data ?? []).length > 0,
+		staleTime: 5_000,
+	});
+
+
 
 	async function onCreateBoard() {
 		try {
@@ -103,8 +120,14 @@ export default function ForumPage() {
 									<div key={b.id} className="chiclet" style={{ position: 'relative' }} onClick={() => navigate(`/forum/${forumId}/board/${b.id}`)}>
 										<div className="title">{b.title}</div>
 										{(b.description) && (
-											<div className="sub">{b.description}</div>
+											<div className="desc">{b.description}</div>
 										)}
+										{(() => {
+											const lp: any = (lastPostByBoardId as any)[b.id];
+											if (!lp) return null;
+											const since = formatTimeSince(lp.date);
+											return <div className="sub">Active {since}</div>;
+										})()}
 										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
 											<button className="btn ghost" onClick={() => setOpenMenuForBoardId(openMenuForBoardId === b.id ? null : b.id)} title="More">⋯</button>
 											{openMenuForBoardId === b.id && (

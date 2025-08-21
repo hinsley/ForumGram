@@ -295,3 +295,41 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 	return items;
 }
 
+/**
+ * Returns the most recent post for a given thread, or null if none exists.
+ * Uses a modest search limit and then picks the latest by date to avoid
+ * relying on server-side search ordering.
+ */
+export async function getLastPostForThread(input: Api.TypeInputPeer, parentThreadId: string, queryLimit: number = 100): Promise<PostCard | null> {
+    const items = await searchPostCards(input, parentThreadId, queryLimit);
+    if (!items.length) return null;
+    let latest: PostCard | null = null;
+    for (const p of items) {
+        if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
+    }
+    return latest;
+}
+
+/**
+ * Returns the most recent post across all threads within a board.
+ * Scans a limited number of most recent threads to balance performance.
+ */
+export async function getLastPostForBoard(
+    input: Api.TypeInputPeer,
+    parentBoardId: string,
+    perThreadPostQueryLimit: number = 50,
+    maxThreadsToScan: number = 30,
+): Promise<PostCard | null> {
+    const threads = await searchThreadCards(input, parentBoardId, 500);
+    // Prioritize newest threads first (by creation date as a heuristic)
+    const sorted = [...threads].sort((a, b) => (b.date ?? 0) - (a.date ?? 0)).slice(0, Math.max(1, maxThreadsToScan));
+    const results = await Promise.all(sorted.map(t => getLastPostForThread(input, t.id, perThreadPostQueryLimit)));
+    const nonNull = results.filter(Boolean) as PostCard[];
+    if (!nonNull.length) return null;
+    let latest: PostCard | null = null;
+    for (const p of nonNull) {
+        if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
+    }
+    return latest;
+}
+

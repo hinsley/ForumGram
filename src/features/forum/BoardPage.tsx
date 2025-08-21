@@ -4,7 +4,7 @@ import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards } from '@lib/protocol';
+import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -12,6 +12,7 @@ import { useSessionStore } from '@state/session';
 import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
+import { formatTimeSince } from '@lib/time';
 
 export default function BoardPage() {
 	const { id, boardId, threadId } = useParams();
@@ -71,6 +72,22 @@ export default function BoardPage() {
 		enabled: Number.isFinite(forumId) && Boolean(boardId),
 		staleTime: 10_000,
 	});
+
+	const { data: lastPostByThreadId = {}, isLoading: loadingThreadLastPosts } = useQuery<{ [threadId: string]: any }>({
+		queryKey: ['last-post-by-thread', forumId, boardId, (threads ?? []).map((t) => t.id)],
+		queryFn: async () => {
+			const input = getInputPeerForForumId(forumId);
+			const entries = await Promise.all((threads ?? []).map(async (t) => {
+				const lp = await getLastPostForThread(input, t.id);
+				return [t.id, lp] as const;
+			}));
+			return Object.fromEntries(entries);
+		},
+		enabled: Number.isFinite(forumId) && Boolean(boardId) && (threads ?? []).length > 0,
+		staleTime: 5_000,
+	});
+
+
 
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
 	useEffect(() => {
@@ -429,6 +446,12 @@ export default function BoardPage() {
 								{threads.map((t) => (
 									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}`); }}>
 										<div className="title">{t.title}</div>
+										{(() => {
+											const lp: any = (lastPostByThreadId as any)[t.id];
+											if (!lp) return null;
+											const since = formatTimeSince(lp.date);
+											return <div className="sub">Active {since}</div>;
+										})()}
 										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
 											<button
 												className="btn ghost"
