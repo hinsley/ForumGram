@@ -209,6 +209,18 @@ export async function joinInviteLink(linkOrHash: string) {
 	const client = await getClient();
 	const hash = extractInviteHash(linkOrHash) ?? linkOrHash;
 	if (!hash) throw new Error('Invalid invite link');
-	const updates = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-	return updates as any;
+	try {
+		const updates = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+		return updates as any;
+	} catch (e: any) {
+		// If user is already a participant, fall back to a preview to obtain the chat entity
+		try {
+			const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+			const chat: any = (invite as any)?.chat;
+			if (chat) {
+				return { chats: [chat] } as any;
+			}
+		} catch {}
+		throw e;
+	}
 }

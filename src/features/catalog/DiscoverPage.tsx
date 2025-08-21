@@ -68,15 +68,16 @@ export default function DiscoverPage() {
 			setLoading(true);
 			setError(null);
 			const updates: any = await joinInviteLink(query.trim());
+			// Try to derive chat/channel entity from updates
 			const channel = (updates?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
 			const chat = (updates?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-			const id = channel ? Number(channel.id) : (chat ? Number(chat.id) : null);
-			if (!id) throw new Error('Joined, but no chat found in updates');
-			if (channel) {
-				addOrUpdateForum({ id, title: channel.title, username: channel.username, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
-			} else if (chat) {
-				addOrUpdateForum({ id, title: chat.title, username: chat.username, accessHash: undefined, isForum: false, isPublic: Boolean(chat.username) });
-			}
+			const entity: any = channel || chat || updates?.chat || null;
+			if (!entity) throw new Error('Joined, but no chat found in response');
+			const id = Number(entity.id);
+			const title = entity.title || entity.username || `Forum ${id}`;
+			const username = entity.username;
+			const accessHash = entity.accessHash ?? entity.access_hash;
+			addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(entity.forum), isPublic: Boolean(username) });
 			navigate(`/forum/${id}`);
 		} catch (e: any) {
 			setError(e?.message ?? 'Failed to join invite link');
