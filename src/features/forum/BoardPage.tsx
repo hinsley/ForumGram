@@ -13,6 +13,7 @@ import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
+import ForumAvatar from '@components/ForumAvatar';
 
 export default function BoardPage() {
 	const { id, boardId, threadId } = useParams();
@@ -425,7 +426,8 @@ export default function BoardPage() {
 			<main className="main">
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
-						<div className="row" style={{ alignItems: 'center' }}>
+						<div className="row" style={{ alignItems: 'center', gap: 10 }}>
+							<ForumAvatar forumId={forumId} username={forumMeta?.username} size={34} title={forumTitle} />
 							<h3 style={{ margin: 0 }}>
 								<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 								{' > '}
@@ -471,15 +473,15 @@ export default function BoardPage() {
 												</div>
 											)}
 										</div>
-									</div>
-								))}
+									))}
 							</div>
 						)}
 					</div>
 				) : (
 					<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 						<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
-							<div className="row" style={{ alignItems: 'center' }}>
+							<div className="row" style={{ alignItems: 'center', gap: 10 }}>
+								<ForumAvatar forumId={forumId} username={forumMeta?.username} size={30} title={forumTitle} />
 								<h3 style={{ margin: 0 }}>
 									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 									{' > '}
