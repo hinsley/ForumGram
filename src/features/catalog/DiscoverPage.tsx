@@ -31,18 +31,16 @@ export default function DiscoverPage() {
 			const normalized = (input.startsWith('@') || input.includes('t.me') || input.includes('telegram.me')) ? input : ('@' + input);
 			const res: any = await resolveForum(normalized);
 			setResult(res);
-			// Determine if this is an invite preview or a resolved username
 			const isInvite = Boolean((res?._ ?? res?.className)?.toString().toLowerCase().includes('chatinvite')) && !((res?._ ?? res?.className)?.toString().toLowerCase().includes('already'));
 			setIsInvitePreview(isInvite);
-			// If we have chats, we can cache basic meta immediately
 			const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
 			const chat = (res?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
 			if (channel) {
 				const handle = input.startsWith('@') ? input.slice(1) : (input.includes('t.me') ? undefined : input);
-				addOrUpdateForum({ id: Number(channel.id), title: channel.title, username: handle, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
+				addOrUpdateForum({ id: Number(channel.id), title: channel.title, username: handle ?? channel.username, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
 			} else if (chat) {
 				const handle = input.startsWith('@') ? input.slice(1) : (input.includes('t.me') ? undefined : input);
-				addOrUpdateForum({ id: Number(chat.id), title: chat.title, username: handle, accessHash: undefined, isForum: false, isPublic: Boolean(handle) });
+				addOrUpdateForum({ id: Number(chat.id), title: chat.title, username: handle ?? chat.username, accessHash: undefined, isForum: false, isPublic: Boolean(handle ?? chat.username) });
 			}
 		} catch (e: any) {
 			setError(e?.message ?? 'Failed to resolve');
@@ -67,18 +65,31 @@ export default function DiscoverPage() {
 		try {
 			setLoading(true);
 			setError(null);
-			const updates: any = await joinInviteLink(query.trim());
-			// Try to derive chat/channel entity from updates
-			const channel = (updates?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-			const chat = (updates?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-			const entity: any = channel || chat || updates?.chat || null;
-			if (!entity) throw new Error('Joined, but no chat found in response');
-			const id = Number(entity.id);
-			const title = entity.title || entity.username || `Forum ${id}`;
-			const username = entity.username;
-			const accessHash = entity.accessHash ?? entity.access_hash;
-			addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(entity.forum), isPublic: Boolean(username) });
-			navigate(`/forum/${id}`);
+			const inputVal = query.trim();
+			if (inputVal.startsWith('@') || (!inputVal.includes('t.me') && !inputVal.includes('telegram.me'))) {
+				// Public handle join
+				const { joinPublicByUsername } = await import('@lib/telegram/client');
+				const ch: any = await joinPublicByUsername(inputVal);
+				const id = Number(ch.id);
+				const title = ch.title || ch.username || `Forum ${id}`;
+				const username = ch.username;
+				const accessHash = ch.accessHash ?? ch.access_hash;
+				addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(ch.forum), isPublic: Boolean(username) });
+				navigate(`/forum/${id}`);
+			} else {
+				// Invite link join
+				const updates: any = await joinInviteLink(inputVal);
+				const channel = (updates?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
+				const chat = (updates?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
+				const entity: any = channel || chat || updates?.chat || null;
+				if (!entity) throw new Error('Joined, but no chat found in response');
+				const id = Number(entity.id);
+				const title = entity.title || entity.username || `Forum ${id}`;
+				const username = entity.username;
+				const accessHash = entity.accessHash ?? entity.access_hash;
+				addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(entity.forum), isPublic: Boolean(username) });
+				navigate(`/forum/${id}`);
+			}
 		} catch (e: any) {
 			setError(e?.message ?? 'Failed to join invite link');
 		} finally {

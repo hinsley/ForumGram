@@ -224,3 +224,18 @@ export async function joinInviteLink(linkOrHash: string) {
 		throw e;
 	}
 }
+
+export async function joinPublicByUsername(usernameOrAt: string) {
+	const client = await getClient();
+	const username = usernameOrAt.startsWith('@') ? usernameOrAt.slice(1) : usernameOrAt;
+	const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username }));
+	const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
+	if (!channel) throw new Error('No public forum found for this handle');
+	try {
+		const inputChannel = new Api.InputChannel({ channelId: channel.id, accessHash: channel.accessHash } as any);
+		await client.invoke(new Api.channels.JoinChannel({ channel: inputChannel } as any));
+	} catch (e: any) {
+		// If already a participant or cannot join (e.g., joining own), proceed to return entity
+	}
+	return channel as any;
+}
