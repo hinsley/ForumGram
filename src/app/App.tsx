@@ -5,6 +5,8 @@ import ForumPage from '@features/forum/ForumPage';
 import SettingsPage from '@features/settings/SettingsPage';
 import { useSessionStore } from '@state/session';
 import BoardPage from '@features/forum/BoardPage';
+import { useEffect } from 'react';
+import { useSettingsStore } from '@state/settings';
 
 function Header() {
 	const navigate = useNavigate();
@@ -37,6 +39,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+	const theme = useSettingsStore((s) => s.theme);
+	useEffect(() => {
+		try { document.documentElement.setAttribute('data-theme', theme); } catch {}
+	}, [theme]);
 	return (
 		<div className="app-shell">
 			<Header />

@@ -1,7 +1,7 @@
 import { useSettingsStore } from '@state/settings';
 
 export default function SettingsPage() {
-	const { markdownEnabled, katexEnabled, forumSecret, imageMaxWidthPx, setMarkdown, setKatex, setForumSecret, setImageMaxWidthPx } = useSettingsStore();
+	const { markdownEnabled, katexEnabled, forumSecret, imageMaxWidthPx, theme, setMarkdown, setKatex, setForumSecret, setImageMaxWidthPx, setTheme } = useSettingsStore();
 	return (
 		<div className="content" style={{ gridTemplateColumns: '1fr' }}>
 			<main className="main">
@@ -32,6 +32,15 @@ export default function SettingsPage() {
 									if (Number.isFinite(parsed)) setImageMaxWidthPx(parsed);
 								}}
 							/>
+						</div>
+						<div className="field">
+							<label className="label">Theme</label>
+							<select className="input" value={theme} onChange={(e) => setTheme(e.target.value as any)}>
+								<option value="forumgram-blue">ForumGram Blue</option>
+								<option value="monokai-dimmed">Monokai Dimmed</option>
+								<option value="catppuccin-mocha">Catppuccin Mocha</option>
+								<option value="telegram-light">Telegram Light</option>
+							</select>
 						</div>
 					</div>
 				</div>
