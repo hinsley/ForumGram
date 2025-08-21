@@ -123,14 +123,12 @@ export default function BoardPage() {
 		}
 	}, [currentPage, totalPages, totalPostCount, threadId, pageParam, forumId, boardId, navigate]);
 
-	// If a thread route lacks page, redirect to last page (newest)
+	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
 	useEffect(() => {
-		if (!threadId) return;
-		if (pageParam) return;
-		if (typeof totalPostCount !== 'number') return;
-		const last = Math.max(1, Math.ceil((totalPostCount || 0) / pageSize));
-		navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${last}`, { replace: true });
-	}, [threadId, pageParam, totalPostCount, pageSize, forumId, boardId, navigate]);
+		if (threadId && !pageParam) {
+			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/1`, { replace: true });
+		}
+	}, [threadId, pageParam, forumId, boardId, navigate]);
 
 	// Fetch just the current page from Telegram using search with addOffset/limit
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
@@ -138,18 +136,9 @@ export default function BoardPage() {
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
 			const N = totalPostCount || 0;
-			const isLastPage = currentPage >= Math.max(1, Math.ceil((N || 0) / pageSize));
-			const pagesTotal = Math.max(1, Math.ceil((N || 0) / pageSize));
-			const pagesFromLatest = Math.max(0, pagesTotal - currentPage);
+			const addOffset = Math.max(0, (currentPage - 1) * pageSize);
 			const input = getInputPeerForForumId(forumId);
-			const items = await (async () => {
-				try {
-					return await (await import('@lib/protocol')).searchPostCardsPage(input, String(activeThreadId), pagesFromLatest, pageSize);
-				} catch {
-					// fallback to simple slice if dynamic import fails
-					return await searchPostCardsSlice(input, String(activeThreadId), 0, pageSize);
-				}
-			})();
+			const items = await searchPostCardsSlice(input, String(activeThreadId), addOffset, pageSize);
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
