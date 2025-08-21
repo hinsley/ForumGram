@@ -138,14 +138,18 @@ export default function BoardPage() {
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
 			const N = totalPostCount || 0;
-			const startIndex = (currentPage - 1) * pageSize;
-			const endExclusive = Math.min(startIndex + pageSize, Math.max(0, N));
-			// If we're on the last page, always ask for full pageSize from the newest edge (addOffset=0)
 			const isLastPage = currentPage >= Math.max(1, Math.ceil((N || 0) / pageSize));
-			const effectiveLimit = isLastPage ? pageSize : Math.max(0, endExclusive - startIndex);
-			const effectiveAddOffset = isLastPage ? 0 : Math.max(0, N - endExclusive);
+			const pagesTotal = Math.max(1, Math.ceil((N || 0) / pageSize));
+			const pagesFromLatest = Math.max(0, pagesTotal - currentPage);
 			const input = getInputPeerForForumId(forumId);
-			const items = await searchPostCardsSlice(input, String(activeThreadId), effectiveAddOffset, effectiveLimit);
+			const items = await (async () => {
+				try {
+					return await (await import('@lib/protocol')).searchPostCardsPage(input, String(activeThreadId), pagesFromLatest, pageSize);
+				} catch {
+					// fallback to simple slice if dynamic import fails
+					return await searchPostCardsSlice(input, String(activeThreadId), 0, pageSize);
+				}
+			})();
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
