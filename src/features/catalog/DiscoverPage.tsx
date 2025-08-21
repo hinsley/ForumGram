@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { resolveForum, joinInviteLink } from '@lib/telegram/client';
+import { joinInviteLink } from '@lib/telegram/client';
 import { useForumsStore } from '@state/forums';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
@@ -9,10 +9,8 @@ import SidebarToggle from '@components/SidebarToggle';
 
 export default function DiscoverPage() {
 	const [query, setQuery] = useState('');
-	const [result, setResult] = useState<any | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [isInvitePreview, setIsInvitePreview] = useState(false);
 	const addOrUpdateForum = useForumsStore((s) => s.addOrUpdateForum);
 	const initForums = useForumsStore((s) => s.initFromStorage);
 	const navigate = useNavigate();
@@ -21,45 +19,6 @@ export default function DiscoverPage() {
 	const { isSidebarCollapsed } = useUiStore();
 
 	useEffect(() => { initForums(); }, [initForums]);
-
-	async function onResolve() {
-		try {
-			setLoading(true);
-			setError(null);
-			setIsInvitePreview(false);
-			const input = query.trim();
-			const normalized = (input.startsWith('@') || input.includes('t.me') || input.includes('telegram.me')) ? input : ('@' + input);
-			const res: any = await resolveForum(normalized);
-			setResult(res);
-			const isInvite = Boolean((res?._ ?? res?.className)?.toString().toLowerCase().includes('chatinvite')) && !((res?._ ?? res?.className)?.toString().toLowerCase().includes('already'));
-			setIsInvitePreview(isInvite);
-			const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-			const chat = (res?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-			if (channel) {
-				const handle = input.startsWith('@') ? input.slice(1) : (input.includes('t.me') ? undefined : input);
-				addOrUpdateForum({ id: Number(channel.id), title: channel.title, username: handle ?? channel.username, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
-			} else if (chat) {
-				const handle = input.startsWith('@') ? input.slice(1) : (input.includes('t.me') ? undefined : input);
-				addOrUpdateForum({ id: Number(chat.id), title: chat.title, username: handle ?? chat.username, accessHash: undefined, isForum: false, isPublic: Boolean(handle ?? chat.username) });
-			}
-		} catch (e: any) {
-			setError(e?.message ?? 'Failed to resolve');
-		} finally { setLoading(false); }
-	}
-
-	function onOpen() {
-		try {
-			const channel = (result?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-			const chat = (result?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-			// Some invite responses (ChatInviteAlready) return a single chat object directly
-			const directChat = (!channel && !chat && (result?.chat)) ? result.chat : null;
-			const id = channel ? Number(channel.id) : (chat ? Number(chat.id) : (directChat ? Number(directChat.id) : null));
-			if (!id) throw new Error('No suitable chat in result');
-			navigate(`/forum/${id}`);
-		} catch (e: any) {
-			setError(e?.message ?? 'Cannot open forum');
-		}
-	}
 
 	function classifyInput(input: string): { kind: 'invite'|'username'; value: string } {
 		const s = input.trim();
@@ -90,7 +49,6 @@ export default function DiscoverPage() {
 			const inputVal = query.trim();
 			const kind = classifyInput(inputVal);
 			if (kind.kind === 'username') {
-				// Public handle join
 				const { joinPublicByUsername } = await import('@lib/telegram/client');
 				const ch: any = await joinPublicByUsername(kind.value);
 				const id = Number(ch.id);
@@ -100,7 +58,6 @@ export default function DiscoverPage() {
 				addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(ch.forum), isPublic: Boolean(username) });
 				navigate(`/forum/${id}`);
 			} else {
-				// Invite link join
 				const updates: any = await joinInviteLink(inputVal);
 				const channel = (updates?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
 				const chat = (updates?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
@@ -114,7 +71,7 @@ export default function DiscoverPage() {
 				navigate(`/forum/${id}`);
 			}
 		} catch (e: any) {
-			setError(e?.message ?? 'Failed to join invite link');
+			setError(e?.message ?? 'Failed to join forum');
 		} finally {
 			setLoading(false);
 		}
@@ -125,16 +82,13 @@ export default function DiscoverPage() {
 			setError(null);
 			setLoading(true);
 			const handle = address.startsWith('@') ? address.slice(1) : address;
-			const res: any = await resolveForum('@' + handle);
-			const channel = (res.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-			const chat = (res.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-			const id = channel ? Number(channel.id) : (chat ? Number(chat.id) : null);
-			if (!id) throw new Error('No suitable chat in result');
-			if (channel) {
-				addOrUpdateForum({ id, title: channel.title, username: handle, accessHash: channel.accessHash, isForum: Boolean(channel.forum), isPublic: Boolean(channel.username) });
-			} else if (chat) {
-				addOrUpdateForum({ id, title: chat.title, username: handle, accessHash: undefined, isForum: false, isPublic: Boolean(handle) });
-			}
+			const { joinPublicByUsername } = await import('@lib/telegram/client');
+			const ch: any = await joinPublicByUsername(handle);
+			const id = Number(ch.id);
+			const title = ch.title || ch.username || `Forum ${id}`;
+			const username = ch.username;
+			const accessHash = ch.accessHash ?? ch.access_hash;
+			addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(ch.forum), isPublic: Boolean(username) });
 			navigate(`/forum/${id}`);
 		} catch (e: any) {
 			setError(e?.message ?? 'Failed to open featured forum');
@@ -161,22 +115,9 @@ export default function DiscoverPage() {
 								<div className="form-row">
 									<input className="input" placeholder="@my_forum or https://t.me/+hash" value={query} onChange={(e) => setQuery(e.target.value)} />
 									<button className="btn primary" onClick={onJoin} disabled={!query || loading}>Join</button>
-									<button className="btn" onClick={onResolve} disabled={!query || loading}>Preview</button>
 								</div>
 							</div>
 							{error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
-							{result && (
-								<div className="col" style={{ marginTop: 8 }}>
-									<pre style={{ overflow: 'auto', maxHeight: 320 }}>{JSON.stringify(result, null, 2)}</pre>
-									<div className="form-row">
-										{isInvitePreview ? (
-											<button className="btn primary" onClick={onJoin} disabled={loading}>Join forum</button>
-										) : (
-											<button className="btn" onClick={onOpen}>Open forum</button>
-										)}
-									</div>
-								</div>
-							)}
 						</div>
 						<div className="card" style={{ padding: 12 }}>
 							<FeaturedForums onSelect={onSelectFeatured} />
