@@ -12,6 +12,9 @@
 	--border: #1f2a44;
 	--shadow: 0 8px 24px rgba(2, 6, 23, 0.4);
 
+	/* Links default to accent unless overridden by theme */
+	--link: var(--accent);
+
 	/* Extended surfaces */
 	--header-grad-top: #0f1b31;
 	--header-grad-bottom: #0b1220;
@@ -52,6 +55,9 @@ html[data-theme="monokai-dimmed"] {
 	--success: #A6E22E;
 	--border: #3a3a3a;
 	--shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+	/* Use Monokai constant color for links */
+	--link: #AE81FF;
 
 	--header-grad-top: #2a2a2a;
 	--header-grad-bottom: #1e1e1e;
@@ -144,7 +150,7 @@ html[data-theme="telegram-light"] {
 html, body, #root { height: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
 
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--link, var(--accent)); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* Layout */
