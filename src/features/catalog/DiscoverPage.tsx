@@ -125,7 +125,7 @@ export default function DiscoverPage() {
 								<label className="label">Forum handle or invite</label>
 								<div className="form-row">
 									<input className="input" placeholder="@my_forum or https://t.me/+hash" value={query} onChange={(e) => setQuery(e.target.value)} />
-									<button className="btn primary" onClick={onResolve} disabled={!query || loading}>Resolve</button>
+									<button className="btn primary" onClick={onResolve} disabled={!query || loading}>Join</button>
 								</div>
 							</div>
 							{error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
