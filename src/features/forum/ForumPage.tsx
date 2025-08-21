@@ -8,6 +8,7 @@ import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash, getLastP
 import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
+import { formatTimeSince } from '@lib/time';
 
 export default function ForumPage() {
 	const { id } = useParams();
@@ -44,18 +45,7 @@ export default function ForumPage() {
 		staleTime: 5_000,
 	});
 
-	function formatDateTime(epochSeconds?: number): string {
-		if (!epochSeconds) return '';
-		const d = new Date(epochSeconds * 1000);
-		const pad = (n: number) => String(n).padStart(2, '0');
-		const yyyy = d.getFullYear();
-		const mm = pad(d.getMonth() + 1);
-		const dd = pad(d.getDate());
-		const hh = pad(d.getHours());
-		const mi = pad(d.getMinutes());
-		const ss = pad(d.getSeconds());
-		return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
-	}
+
 
 	async function onCreateBoard() {
 		try {
@@ -135,10 +125,8 @@ export default function ForumPage() {
 										{(() => {
 											const lp: any = (lastPostByBoardId as any)[b.id];
 											if (!lp) return null;
-											const uname = lp.user?.username ? `@${lp.user.username}` : [lp.user?.firstName, lp.user?.lastName].filter(Boolean).join(' ') || 'unknown';
-											return (
-												<div className="sub">Last post by {uname} at {formatDateTime(lp.date)}</div>
-											);
+											const since = formatTimeSince(lp.date);
+											return <div className="sub">Active {since}</div>;
 										})()}
 										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
 											<button className="btn ghost" onClick={() => setOpenMenuForBoardId(openMenuForBoardId === b.id ? null : b.id)} title="More">⋯</button>

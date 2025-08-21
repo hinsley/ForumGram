@@ -12,6 +12,7 @@ import { useSessionStore } from '@state/session';
 import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
+import { formatTimeSince } from '@lib/time';
 
 export default function BoardPage() {
 	const { id, boardId, threadId } = useParams();
@@ -86,18 +87,7 @@ export default function BoardPage() {
 		staleTime: 5_000,
 	});
 
-	function formatDateTime(epochSeconds?: number): string {
-		if (!epochSeconds) return '';
-		const d = new Date(epochSeconds * 1000);
-		const pad = (n: number) => String(n).padStart(2, '0');
-		const yyyy = d.getFullYear();
-		const mm = pad(d.getMonth() + 1);
-		const dd = pad(d.getDate());
-		const hh = pad(d.getHours());
-		const mi = pad(d.getMinutes());
-		const ss = pad(d.getSeconds());
-		return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
-	}
+
 
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
 	useEffect(() => {
@@ -459,10 +449,8 @@ export default function BoardPage() {
 										{(() => {
 											const lp: any = (lastPostByThreadId as any)[t.id];
 											if (!lp) return null;
-											const uname = lp.user?.username ? `@${lp.user.username}` : [lp.user?.firstName, lp.user?.lastName].filter(Boolean).join(' ') || 'unknown';
-											return (
-												<div className="sub">Last post by {uname} at {formatDateTime(lp.date)}</div>
-											);
+											const since = formatTimeSince(lp.date);
+											return <div className="sub">Active {since}</div>;
 										})()}
 										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
 											<button
