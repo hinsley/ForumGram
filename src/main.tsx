@@ -6,6 +6,7 @@ import App from './app/App';
 import '@styles/theme.css';
 import { registerSW } from 'virtual:pwa-register';
 import { useForumsStore } from '@state/forums';
+import { useSettingsStore } from '@state/settings';
 
 const queryClient = new QueryClient({
 	defaultOptions: {
@@ -20,6 +21,9 @@ registerSW({ immediate: true });
 
 // Hydrate forums from localStorage on startup so the sidebar has recent forums
 try { useForumsStore.getState().initFromStorage(); } catch {}
+
+// Apply initial theme before React renders to minimize flash
+try { document.documentElement.setAttribute('data-theme', useSettingsStore.getState().theme); } catch {}
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 	<StrictMode>
