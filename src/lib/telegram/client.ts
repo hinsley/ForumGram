@@ -86,14 +86,39 @@ export async function resolveForum(handleOrInvite: string) {
 		return res;
 	}
 	if (handleOrInvite.includes('t.me') || handleOrInvite.includes('telegram.me')) {
-		const path = handleOrInvite.split('/').pop() ?? '';
-		if (path.startsWith('+')) {
-			const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: path.slice(1) }));
-			return invite;
+		// Support: https://t.me/+HASH, https://t.me/joinchat/HASH, https://t.me/username
+		try {
+			const url = new URL(handleOrInvite);
+			const segments = url.pathname.split('/').filter(Boolean);
+			const last = segments[segments.length - 1] ?? '';
+			const second = segments[segments.length - 2] ?? '';
+			if (second === 'joinchat' && last) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last }));
+				return invite;
+			}
+			if (last.startsWith('+')) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last.slice(1) }));
+				return invite;
+			}
+			const username = last;
+			const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
+			return res;
+		} catch {
+			const parts = handleOrInvite.split('/').filter(Boolean);
+			const last = parts[parts.length - 1] ?? '';
+			const second = parts[parts.length - 2] ?? '';
+			if (second === 'joinchat' && last) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last }));
+				return invite;
+			}
+			if (last.startsWith('+')) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last.slice(1) }));
+				return invite;
+			}
+			const username = last;
+			const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
+			return res;
 		}
-		const username = path;
-		const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
-		return res;
 	}
 	throw new Error('Unsupported forum identifier');
 }
@@ -156,3 +181,61 @@ export async function sendMultiMediaMessage(
 }
 
 // Deprecated topic-specific media helpers removed
+
+function extractInviteHash(input: string): string | null {
+	if (input.startsWith('@')) return null;
+	if (input.includes('t.me') || input.includes('telegram.me')) {
+		try {
+			const url = new URL(input);
+			const segments = url.pathname.split('/').filter(Boolean);
+			const last = segments[segments.length - 1] ?? '';
+			const second = segments[segments.length - 2] ?? '';
+			if (second === 'joinchat' && last) return last;
+			if (last.startsWith('+')) return last.slice(1);
+			return null;
+		} catch {}
+		const parts = input.split('/').filter(Boolean);
+		const last = parts[parts.length - 1] ?? '';
+		const second = parts[parts.length - 2] ?? '';
+		if (second === 'joinchat' && last) return last;
+		if (last.startsWith('+')) return last.slice(1);
+		return null;
+	}
+	if (/^[A-Za-z0-9_-]{16,}$/.test(input)) return input;
+	return null;
+}
+
+export async function joinInviteLink(linkOrHash: string) {
+	const client = await getClient();
+	const hash = extractInviteHash(linkOrHash) ?? linkOrHash;
+	if (!hash) throw new Error('Invalid invite link');
+	try {
+		const updates = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+		return updates as any;
+	} catch (e: any) {
+		// If user is already a participant, fall back to a preview to obtain the chat entity
+		try {
+			const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+			const chat: any = (invite as any)?.chat;
+			if (chat) {
+				return { chats: [chat] } as any;
+			}
+		} catch {}
+		throw e;
+	}
+}
+
+export async function joinPublicByUsername(usernameOrAt: string) {
+	const client = await getClient();
+	const username = usernameOrAt.startsWith('@') ? usernameOrAt.slice(1) : usernameOrAt;
+	const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username }));
+	const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
+	if (!channel) throw new Error('No public forum found for this handle');
+	try {
+		const inputChannel = new Api.InputChannel({ channelId: channel.id, accessHash: channel.accessHash } as any);
+		await client.invoke(new Api.channels.JoinChannel({ channel: inputChannel } as any));
+	} catch (e: any) {
+		// If already a participant or cannot join (e.g., joining own), proceed to return entity
+	}
+	return channel as any;
+}

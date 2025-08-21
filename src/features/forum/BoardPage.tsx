@@ -73,7 +73,7 @@ export default function BoardPage() {
 		staleTime: 10_000,
 	});
 
-	const { data: lastPostByThreadId = {}, isLoading: loadingThreadLastPosts } = useQuery<{ [threadId: string]: any }>({
+	const { data: lastPostByThreadId = {} } = useQuery<{ [threadId: string]: any }>({
 		queryKey: ['last-post-by-thread', forumId, boardId, (threads ?? []).map((t) => t.id)],
 		queryFn: async () => {
 			const input = getInputPeerForForumId(forumId);

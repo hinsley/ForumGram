@@ -31,7 +31,7 @@ export default function ForumPage() {
 		enabled: Number.isFinite(forumId),
 	});
 
-	const { data: lastPostByBoardId = {}, isLoading: loadingLastPosts } = useQuery<{ [boardId: string]: any }>({
+	const { data: lastPostByBoardId = {} } = useQuery<{ [boardId: string]: any }>({
 		queryKey: ['last-post-by-board', forumId, (data ?? []).map((b) => b.id)],
 		queryFn: async () => {
 			const input = getInputPeerForForumId(forumId);
