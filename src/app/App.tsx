@@ -52,6 +52,7 @@ export default function App() {
 				<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
 				<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
 				<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+				<Route path="/forum/:id/board/:boardId/thread/:threadId/page/:page" element={<RequireAuth><BoardPage /></RequireAuth>} />
 				<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
 				<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
 			</Routes>
