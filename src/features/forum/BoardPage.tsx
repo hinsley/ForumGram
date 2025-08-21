@@ -96,13 +96,6 @@ export default function BoardPage() {
 	const pageFromUrl = Number(pageParam);
 	const currentPage = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
 
-	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
-	useEffect(() => {
-		if (threadId && !pageParam) {
-			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/1`, { replace: true });
-		}
-	}, [threadId, pageParam, forumId, boardId, navigate]);
-
 	// Count total posts for this thread to compute pages
 	const { data: totalPostCount = 0 } = useQuery<number>({
 		queryKey: ['post-count', forumId, boardId, activeThreadId],
@@ -129,6 +122,15 @@ export default function BoardPage() {
 			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${totalPages}`);
 		}
 	}, [currentPage, totalPages, totalPostCount, threadId, pageParam, forumId, boardId, navigate]);
+
+	// If a thread route lacks page, redirect to last page (newest)
+	useEffect(() => {
+		if (!threadId) return;
+		if (pageParam) return;
+		if (typeof totalPostCount !== 'number') return;
+		const last = Math.max(1, Math.ceil((totalPostCount || 0) / pageSize));
+		navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${last}`, { replace: true });
+	}, [threadId, pageParam, totalPostCount, pageSize, forumId, boardId, navigate]);
 
 	// Fetch just the current page from Telegram using search with addOffset/limit
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
