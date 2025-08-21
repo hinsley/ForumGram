@@ -120,7 +120,7 @@ export default function ForumPage() {
 									<div key={b.id} className="chiclet" style={{ position: 'relative' }} onClick={() => navigate(`/forum/${forumId}/board/${b.id}`)}>
 										<div className="title">{b.title}</div>
 										{(b.description) && (
-											<div className="sub">{b.description}</div>
+											<div className="desc">{b.description}</div>
 										)}
 										{(() => {
 											const lp: any = (lastPostByBoardId as any)[b.id];
