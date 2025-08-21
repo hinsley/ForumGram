@@ -86,14 +86,39 @@ export async function resolveForum(handleOrInvite: string) {
 		return res;
 	}
 	if (handleOrInvite.includes('t.me') || handleOrInvite.includes('telegram.me')) {
-		const path = handleOrInvite.split('/').pop() ?? '';
-		if (path.startsWith('+')) {
-			const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: path.slice(1) }));
-			return invite;
+		// Support: https://t.me/+HASH, https://t.me/joinchat/HASH, https://t.me/username
+		try {
+			const url = new URL(handleOrInvite);
+			const segments = url.pathname.split('/').filter(Boolean);
+			const last = segments[segments.length - 1] ?? '';
+			const second = segments[segments.length - 2] ?? '';
+			if (second === 'joinchat' && last) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last }));
+				return invite;
+			}
+			if (last.startsWith('+')) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last.slice(1) }));
+				return invite;
+			}
+			const username = last;
+			const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
+			return res;
+		} catch {
+			const parts = handleOrInvite.split('/').filter(Boolean);
+			const last = parts[parts.length - 1] ?? '';
+			const second = parts[parts.length - 2] ?? '';
+			if (second === 'joinchat' && last) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last }));
+				return invite;
+			}
+			if (last.startsWith('+')) {
+				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last.slice(1) }));
+				return invite;
+			}
+			const username = last;
+			const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
+			return res;
 		}
-		const username = path;
-		const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
-		return res;
 	}
 	throw new Error('Unsupported forum identifier');
 }
@@ -156,3 +181,34 @@ export async function sendMultiMediaMessage(
 }
 
 // Deprecated topic-specific media helpers removed
+
+function extractInviteHash(input: string): string | null {
+	if (input.startsWith('@')) return null;
+	if (input.includes('t.me') || input.includes('telegram.me')) {
+		try {
+			const url = new URL(input);
+			const segments = url.pathname.split('/').filter(Boolean);
+			const last = segments[segments.length - 1] ?? '';
+			const second = segments[segments.length - 2] ?? '';
+			if (second === 'joinchat' && last) return last;
+			if (last.startsWith('+')) return last.slice(1);
+			return null;
+		} catch {}
+		const parts = input.split('/').filter(Boolean);
+		const last = parts[parts.length - 1] ?? '';
+		const second = parts[parts.length - 2] ?? '';
+		if (second === 'joinchat' && last) return last;
+		if (last.startsWith('+')) return last.slice(1);
+		return null;
+	}
+	if (/^[A-Za-z0-9_-]{16,}$/.test(input)) return input;
+	return null;
+}
+
+export async function joinInviteLink(linkOrHash: string) {
+	const client = await getClient();
+	const hash = extractInviteHash(linkOrHash) ?? linkOrHash;
+	if (!hash) throw new Error('Invalid invite link');
+	const updates = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+	return updates as any;
+}
