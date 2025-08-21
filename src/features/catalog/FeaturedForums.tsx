@@ -1,4 +1,5 @@
 import featured from './featured-forums.json';
+import ForumAvatar from '@components/ForumAvatar';
 
 interface FeaturedForum { address: string; name: string; description: string; }
 
@@ -10,7 +11,10 @@ export default function FeaturedForums({ onSelect }: { onSelect: (address: strin
 			<div className="gallery">
 				{items.map((f) => (
 					<div key={f.address} className="chiclet" onClick={() => onSelect(f.address)}>
-						<div className="title">{f.name}</div>
+						<div className="row" style={{ alignItems: 'center' }}>
+							<ForumAvatar address={f.address} size={28} alt={f.name} />
+							<div className="title">{f.name}</div>
+						</div>
 						<div className="sub">{f.address}</div>
 						<p style={{ margin: 0 }}>{f.description}</p>
 					</div>

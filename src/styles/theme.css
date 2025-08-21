@@ -255,3 +255,7 @@ a:hover { text-decoration: underline; }
 .post-body { display: flex; flex-direction: column; gap: 8px; }
 .post-meta { color: var(--muted); font-size: 12px; }
 .post-content { font-size: 14px; }
+
+/* Forum avatars (circular) */
+.forum-avatar { border-radius: 999px; object-fit: cover; background: var(--avatar-bg); border: 1px solid var(--border); display: inline-block; overflow: hidden; }
+.forum-avatar.placeholder { opacity: 0.6; }

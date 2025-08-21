@@ -13,6 +13,7 @@ import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
+import ForumAvatar from '@components/ForumAvatar';
 
 export default function BoardPage() {
 	const { id, boardId, threadId } = useParams();
@@ -426,6 +427,7 @@ export default function BoardPage() {
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
 						<div className="row" style={{ alignItems: 'center' }}>
+							<ForumAvatar forumId={forumId} size={28} alt={forumTitle} />
 							<h3 style={{ margin: 0 }}>
 								<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 								{' > '}
@@ -480,6 +482,7 @@ export default function BoardPage() {
 					<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 						<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 							<div className="row" style={{ alignItems: 'center' }}>
+								<ForumAvatar forumId={forumId} size={28} alt={forumTitle} />
 								<h3 style={{ margin: 0 }}>
 									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 									{' > '}

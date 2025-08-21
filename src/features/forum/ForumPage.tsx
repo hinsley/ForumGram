@@ -9,6 +9,7 @@ import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
+import ForumAvatar from '@components/ForumAvatar';
 
 export default function ForumPage() {
 	const { id } = useParams();
@@ -104,7 +105,10 @@ export default function ForumPage() {
 			<SidebarToggle />
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
-					<h3>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
+					<div className="row" style={{ alignItems: 'center' }}>
+						<ForumAvatar forumId={forumId} size={36} alt={forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)} />
+						<h3 style={{ margin: 0 }}>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
+					</div>
 					<div className="col">
 						<div className="row" style={{ alignItems: 'center' }}>
 							<h4 style={{ marginTop: 0, marginBottom: 0 }}>Boards</h4>
