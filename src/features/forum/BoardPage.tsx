@@ -544,7 +544,7 @@ export default function BoardPage() {
 						</div>
 						<div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
 							{loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-								<MessageList messages={posts as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
+								<MessageList key={`${activeThreadId || ''}-${currentPage}`} messages={posts as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
 							)}
 						</div>
 						<div className="composer">
