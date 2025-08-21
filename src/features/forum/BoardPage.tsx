@@ -4,7 +4,7 @@ import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread } from '@lib/protocol';
+import { ThreadMeta, searchThreadCards, searchPostCardsSlice, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread, countPostsForThread } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -87,14 +87,14 @@ export default function BoardPage() {
 		staleTime: 5_000,
 	});
 
-	// Remove selectedThreadId state; derive from params directly
 	const activeThreadId = threadId ?? null;
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
 
 	// Pagination derived from URL
 	const pageSize = 10;
-	const currentPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+	const pageFromUrl = Number(pageParam);
+	const currentPage = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
 
 	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
 	useEffect(() => {
@@ -103,44 +103,47 @@ export default function BoardPage() {
 		}
 	}, [threadId, pageParam, forumId, boardId, navigate]);
 
-	const { data: allCards = [] as any[] , refetch: refetchAllCards, isLoading: loadingAllCards, error: allCardsError } = useQuery({
-		queryKey: ['all-post-cards', forumId, boardId, activeThreadId],
+	// Count total posts for this thread to compute pages
+	const { data: totalPostCount = 0 } = useQuery<number>({
+		queryKey: ['post-count', forumId, boardId, activeThreadId],
 		queryFn: async () => {
-			if (!activeThreadId) return [] as any[];
+			if (!activeThreadId) return 0;
 			const input = getInputPeerForForumId(forumId);
-			const items = await searchPostCards(input, String(activeThreadId), 2000);
-			// Sort ascending by date so we can slice by page in oldest->newest order
-			items.sort((a: any, b: any) => (a.date ?? 0) - (b.date ?? 0));
-			return items as any[];
+			const count = await countPostsForThread(input, String(activeThreadId));
+			return count;
 		},
 		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
 		staleTime: 5_000,
 	});
 
 	const totalPages = useMemo(() => {
-		const N = Array.isArray(allCards) ? allCards.length : 0;
+		const N = totalPostCount || 0;
 		return Math.max(1, Math.ceil(N / pageSize));
-	}, [allCards, pageSize]);
+	}, [totalPostCount, pageSize]);
 
+	// Snap out-of-range deep links to the last page once count is known
 	useEffect(() => {
 		if (!threadId) return;
 		if (!pageParam) return;
-		if (loadingAllCards) return; // wait until we know total pages
-		if (currentPage > totalPages) {
+		if (totalPostCount > 0 && currentPage > totalPages) {
 			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${totalPages}`);
 		}
-	}, [currentPage, totalPages, threadId, pageParam, forumId, boardId, navigate, loadingAllCards]);
+	}, [currentPage, totalPages, totalPostCount, threadId, pageParam, forumId, boardId, navigate]);
 
+	// Fetch just the current page from Telegram using search with addOffset/limit
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
-		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, (allCards as any[]).length],
+		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
-			const cards = Array.isArray(allCards) ? allCards : [];
-			const startIndex = Math.max(0, (currentPage - 1) * pageSize);
-			const endExclusive = Math.min(cards.length, startIndex + pageSize);
-			const slice = cards.slice(startIndex, endExclusive);
+			const N = totalPostCount || 0;
+			const startIndex = (currentPage - 1) * pageSize;
+			const endExclusive = Math.min(startIndex + pageSize, Math.max(0, N));
+			const limit = Math.max(0, endExclusive - startIndex);
+			const addOffset = Math.max(0, N - endExclusive);
+			const input = getInputPeerForForumId(forumId);
+			const items = await searchPostCardsSlice(input, String(activeThreadId), addOffset, limit);
 			// Build author map and load avatars once per unique user.
-			const uniqueUserIds = Array.from(new Set(slice.map((p: any) => p.fromUserId).filter(Boolean))) as number[];
+			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
 			const userIdToUrl: Record<number, string | undefined> = {};
 			for (const uid of uniqueUserIds) {
@@ -150,7 +153,7 @@ export default function BoardPage() {
 						userIdToUrl[uid] = URL.createObjectURL(cached);
 						continue;
 					}
-					let userObj = slice.find((p: any) => p.fromUserId === uid)?.user;
+					let userObj = items.find((p) => p.fromUserId === uid)?.user;
 					if (!userObj) {
 						try {
 							userObj = await (client as any).getEntity(uid);
@@ -173,8 +176,8 @@ export default function BoardPage() {
 					userIdToUrl[uid] = undefined;
 				}
 			}
-			// Map to display messages, preserving metadata used by both branches.
-			const mapped = slice.map((p: any) => ({
+			// Map to display messages
+			const mapped = items.map((p) => ({
 				id: p.messageId,
 				from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
 				date: p.date ?? 0,
@@ -209,11 +212,9 @@ export default function BoardPage() {
 			mapped.sort((a, b) => a.date - b.date);
 			return mapped as any[];
 		},
-		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && !loadingAllCards,
+		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && (typeof totalPostCount === 'number'),
 		staleTime: 5_000,
 	});
-
-	// Removed duplicate recount-and-redirect effect
 
 	async function onCreateThread() {
 		try {
@@ -362,7 +363,7 @@ export default function BoardPage() {
 			setDraftAttachments([]);
 			setIsEditing(false);
 			setEditingMessageId(null);
-			setTimeout(() => { refetchAllCards(); refetchPosts(); }, 250);
+			setTimeout(() => { refetchPosts(); }, 250);
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to send post');
 		}
@@ -443,7 +444,7 @@ export default function BoardPage() {
 				} catch {}
 			}
 			await deleteMessages(input, ids);
-			setTimeout(() => { refetchAllCards(); refetchPosts(); }, 250);
+			setTimeout(() => { refetchPosts(); }, 250);
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to delete post');
 		}
