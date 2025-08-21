@@ -87,11 +87,8 @@ export default function BoardPage() {
 		staleTime: 5_000,
 	});
 
-	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
-	useEffect(() => {
-		setSelectedThreadId(threadId ?? null);
-	}, [threadId]);
-	const activeThreadId = selectedThreadId;
+	// Remove selectedThreadId state; derive from params directly
+	const activeThreadId = threadId ?? null;
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
 
@@ -101,10 +98,10 @@ export default function BoardPage() {
 
 	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
 	useEffect(() => {
-		if (activeThreadId && !pageParam) {
-			navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`, { replace: true });
+		if (threadId && !pageParam) {
+			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/1`, { replace: true });
 		}
-	}, [activeThreadId, pageParam, forumId, boardId, navigate]);
+	}, [threadId, pageParam, forumId, boardId, navigate]);
 
 	const { data: totalPostCount = 0, refetch: refetchPostCount } = useQuery<number>({
 		queryKey: ['post-count', forumId, boardId, activeThreadId],
@@ -121,12 +118,12 @@ export default function BoardPage() {
 	const totalPages = Math.max(1, Math.ceil((totalPostCount || 0) / pageSize));
 
 	useEffect(() => {
-		if (!activeThreadId) return;
+		if (!threadId) return;
 		if (!pageParam) return;
-		if (currentPage > totalPages) {
-			navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${totalPages}`);
+		if ((totalPostCount || 0) > 0 && currentPage > totalPages) {
+			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${totalPages}`);
 		}
-	}, [currentPage, totalPages, activeThreadId, pageParam, forumId, boardId, navigate]);
+	}, [currentPage, totalPages, totalPostCount, threadId, pageParam, forumId, boardId, navigate]);
 
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
 		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
@@ -213,20 +210,7 @@ export default function BoardPage() {
 		staleTime: 5_000,
 	});
 
-	// Keep URL page within bounds once count is known
-	useEffect(() => {
-		if (!activeThreadId) return;
-		(async () => {
-			try {
-				const input = getInputPeerForForumId(forumId);
-				const total = await countPostsForThread(input, String(activeThreadId));
-				const pages = Math.max(1, Math.ceil((total || 0) / pageSize));
-				if (currentPage > pages) {
-					navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${pages}`);
-				}
-			} catch {}
-		})();
-	}, [activeThreadId, currentPage, forumId, boardId, navigate]);
+	// Removed duplicate recount-and-redirect effect
 
 	async function onCreateThread() {
 		try {
@@ -495,7 +479,7 @@ export default function BoardPage() {
 						) : (
 							<div className="gallery boards" style={{ marginTop: 12 }}>
 								{threads.map((t) => (
-									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}/page/1`); }}>
+									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}/page/1`); }}>
 										<div className="title">{t.title}</div>
 										{(() => {
 											const lp: any = (lastPostByThreadId as any)[t.id];
