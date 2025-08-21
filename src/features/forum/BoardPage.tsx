@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread } from '@lib/protocol';
+import { ThreadMeta, searchThreadCards, searchPostCardsSlice, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread, countPostsForThread } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -15,7 +15,7 @@ import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
 
 export default function BoardPage() {
-	const { id, boardId, threadId } = useParams();
+	const { id, boardId, threadId, page: pageParam } = useParams();
 	const forumId = Number(id);
 	const navigate = useNavigate();
 	const initForums = useForumsStore((s) => s.initFromStorage);
@@ -42,7 +42,7 @@ export default function BoardPage() {
 				else if (raw && typeof raw.toNumber === 'function') idNum = raw.toNumber();
 				else if (raw && typeof raw.toJSNumber === 'function') idNum = raw.toJSNumber();
 				else if (raw && typeof raw.value === 'number') idNum = raw.value;
-				else if (typeof raw === 'string' && /^\d+$/.test(raw)) idNum = Number(raw);
+				else if (raw && typeof raw === 'string' && /^\d+$/.test(raw as any)) idNum = Number(raw);
 				if (!canceled) setResolvedUserId(idNum);
 			} catch {}
 		})();
@@ -87,22 +87,61 @@ export default function BoardPage() {
 		staleTime: 5_000,
 	});
 
-
-
-	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadId ?? null);
-	useEffect(() => {
-		setSelectedThreadId(threadId ?? null);
-	}, [threadId]);
-	const activeThreadId = selectedThreadId;
+	const activeThreadId = threadId ?? null;
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
 
+	// Pagination derived from URL
+	const pageSize = 10;
+	const pageFromUrl = Number(pageParam);
+	const currentPage = Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
+
+	// If a thread route lacks page, redirect to /page/1 (deep-linkable pages)
+	useEffect(() => {
+		if (threadId && !pageParam) {
+			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/1`, { replace: true });
+		}
+	}, [threadId, pageParam, forumId, boardId, navigate]);
+
+	// Count total posts for this thread to compute pages
+	const { data: totalPostCount = 0 } = useQuery<number>({
+		queryKey: ['post-count', forumId, boardId, activeThreadId],
+		queryFn: async () => {
+			if (!activeThreadId) return 0;
+			const input = getInputPeerForForumId(forumId);
+			const count = await countPostsForThread(input, String(activeThreadId));
+			return count;
+		},
+		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
+		staleTime: 5_000,
+	});
+
+	const totalPages = useMemo(() => {
+		const N = totalPostCount || 0;
+		return Math.max(1, Math.ceil(N / pageSize));
+	}, [totalPostCount, pageSize]);
+
+	// Snap out-of-range deep links to the last page once count is known
+	useEffect(() => {
+		if (!threadId) return;
+		if (!pageParam) return;
+		if (totalPostCount > 0 && currentPage > totalPages) {
+			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/${totalPages}`);
+		}
+	}, [currentPage, totalPages, totalPostCount, threadId, pageParam, forumId, boardId, navigate]);
+
+	// Fetch just the current page from Telegram using search with addOffset/limit
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
-		queryKey: ['posts', forumId, boardId, activeThreadId],
+		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
+			const N = totalPostCount || 0;
+			const startIndex = (currentPage - 1) * pageSize;
+			const endExclusive = Math.min(startIndex + pageSize, Math.max(0, N));
+			const limit = Math.max(0, endExclusive - startIndex);
+			const addOffset = Math.max(0, N - endExclusive);
 			const input = getInputPeerForForumId(forumId);
-			const items = await searchPostCards(input, String(activeThreadId));
+			const items = await searchPostCardsSlice(input, String(activeThreadId), addOffset, limit);
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
@@ -137,7 +176,7 @@ export default function BoardPage() {
 					userIdToUrl[uid] = undefined;
 				}
 			}
-			// Map to display messages, preserving metadata used by both branches.
+			// Map to display messages
 			const mapped = items.map((p) => ({
 				id: p.messageId,
 				from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
@@ -173,7 +212,7 @@ export default function BoardPage() {
 			mapped.sort((a, b) => a.date - b.date);
 			return mapped as any[];
 		},
-		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
+		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && (typeof totalPostCount === 'number'),
 		staleTime: 5_000,
 	});
 
@@ -444,7 +483,7 @@ export default function BoardPage() {
 						) : (
 							<div className="gallery boards" style={{ marginTop: 12 }}>
 								{threads.map((t) => (
-									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}`); }}>
+									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}/page/1`); }}>
 										<div className="title">{t.title}</div>
 										{(() => {
 											const lp: any = (lastPostByThreadId as any)[t.id];
@@ -488,11 +527,26 @@ export default function BoardPage() {
 									<span>{activeThread ? activeThread.title : 'Thread'}</span>
 								</h3>
 								<div className="spacer" />
+								<div className="row" style={{ gap: 6 }}>
+									{currentPage > 1 && (
+										<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`)}>First</button>
+									)}
+									{currentPage > 2 && (
+										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.max(1, currentPage - 1)}`)}>Previous</button>
+									)}
+									{currentPage < totalPages - 1 && (
+										<button className="btn" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.min(totalPages, currentPage + 1)}`)}>Next</button>
+									)}
+									{currentPage < totalPages && (
+										<button className="btn ghost" onClick={() => navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${totalPages}`)}>Last</button>
+									)}
+									<div style={{ color: 'var(--muted)', marginLeft: 8 }}>{currentPage}/{totalPages}</div>
+								</div>
 							</div>
 						</div>
 						<div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
 							{loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-								<MessageList messages={posts as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
+								<MessageList key={`${activeThreadId || ''}-${currentPage}`} messages={posts as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
 							)}
 						</div>
 						<div className="composer">

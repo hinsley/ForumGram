@@ -296,6 +296,56 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 }
 
 /**
+ * Efficiently counts the number of posts that belong to a thread using Telegram search.
+ * Relies on MessagesSlice.count when available.
+ */
+export async function countPostsForThread(input: Api.TypeInputPeer, parentThreadId: string): Promise<number> {
+	const client = await getClient();
+	const q = `fg.post ${parentThreadId}`;
+	// Use a tiny limit to get count metadata without transferring many messages
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: 1, filter: new Api.InputMessagesFilterEmpty() }));
+	const count: number | undefined = (res && (res.count ?? res.total ?? res._count)) as any;
+	if (typeof count === 'number' && count >= 0) return count;
+	// Fallback: derive from returned messages length if count is unavailable
+	const msgs: any[] = (res?.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	// Filter to exact thread id matches
+	let matched = 0;
+	for (const m of msgs) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (parsed && parsed.parentThreadId === parentThreadId) matched++;
+	}
+	return matched;
+}
+
+/**
+ * Fetches a slice of posts for a thread using Telegram search addOffset/limit.
+ * The returned array is NOT guaranteed to be chronological; callers should sort by date.
+ */
+export async function searchPostCardsSlice(
+	input: Api.TypeInputPeer,
+	parentThreadId: string,
+	addOffset: number,
+	limit: number,
+): Promise<PostCard[]> {
+	const client = await getClient();
+	const q = `fg.post ${parentThreadId}`;
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(0, limit), addOffset: Math.max(0, addOffset), filter: new Api.InputMessagesFilterEmpty() } as any));
+	const usersMap: Record<string, any> = {};
+	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+	const items: PostCard[] = [];
+	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	for (const m of messages) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (!parsed) continue;
+		if (parsed.parentThreadId !== parentThreadId) continue;
+		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+		const msgId = Number(m.id);
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+	}
+	return items;
+}
+
+/**
  * Returns the most recent post for a given thread, or null if none exists.
  * Uses a modest search limit and then picks the latest by date to avoid
  * relying on server-side search ordering.
