@@ -135,9 +135,12 @@ export default function BoardPage() {
 		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
+			const N = totalPostCount || 0;
+			const pagesTotal = Math.max(1, Math.ceil((N || 0) / pageSize));
 			const pagesFromLatest = Math.max(0, currentPage - 1);
+			const exactLimit = currentPage === pagesTotal ? Math.max(1, N - pageSize * (pagesTotal - 1)) : pageSize;
 			const input = getInputPeerForForumId(forumId);
-			const items = await (await import('@lib/protocol')).searchPostCardsPageByOffsetNew(input, String(activeThreadId), pagesFromLatest, pageSize);
+			const items = await (await import('@lib/protocol')).searchPostCardsPageByOffsetNew(input, String(activeThreadId), pagesFromLatest, exactLimit);
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
