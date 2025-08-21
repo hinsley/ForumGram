@@ -64,6 +64,7 @@ a:hover { text-decoration: underline; }
 .chiclet { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1b31; cursor: pointer; box-shadow: var(--shadow); width: 240px; overflow: visible; }
 .chiclet:hover { background: #14203a; }
 .chiclet .title { font-weight: 700; }
+.chiclet .sub { color: var(--muted); font-size: 12px; }
 
 /* Forms */
 .input { width: 100%; padding: 10px 12px; background: #0b1529; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
