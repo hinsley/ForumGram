@@ -263,3 +263,31 @@ export async function fetchForumProfilePhotoObjectUrlByForumId(forumId: number):
         return null;
     }
 }
+
+export async function fetchForumPhotoObjectUrlByGetFile(forumId: number): Promise<string | null> {
+    try {
+        const client = await getClient();
+        const input = getInputPeerForForumId(forumId);
+        let entity: any = null;
+        try {
+            entity = await (client as any).getEntity(input);
+        } catch {}
+        const photo: any = entity?.photo;
+        const photoId = photo?.photoId ?? photo?.photo_id ?? photo?.id ?? undefined;
+        if (!photoId) return null;
+        try {
+            const location: any = new Api.InputPeerPhotoFileLocation({ peer: input as any, photoId, big: true } as any);
+            const file: any = await client.invoke(new Api.upload.GetFile({ location, offset: 0, limit: 1024 * 1024 } as any));
+            const bytes: any = (file as any)?.bytes ?? (file as any)?.file?.bytes ?? null;
+            if (!bytes) return null;
+            const buf = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+            const blob = new Blob([buf]);
+            const url = URL.createObjectURL(blob);
+            return url;
+        } catch {
+            return null;
+        }
+    } catch {
+        return null;
+    }
+}

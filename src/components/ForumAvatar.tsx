@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { fetchForumProfilePhotoObjectUrlByForumId } from '@lib/telegram/client';
+import { fetchForumPhotoObjectUrlByGetFile } from '@lib/telegram/client';
 import { Api } from 'telegram';
 
 type ForumAvatarProps = {
@@ -38,7 +38,7 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 				if (typeof forumId === 'number') {
 					const cached = inMemoryUrlCacheByForumId.get(forumId);
 					if (cached) { setUrl(cached); return; }
-					const objectUrl = await fetchForumProfilePhotoObjectUrlByForumId(forumId);
+					const objectUrl = await fetchForumPhotoObjectUrlByGetFile(forumId);
 					if (objectUrl) {
 						inMemoryUrlCacheByForumId.set(forumId, objectUrl);
 						cleanupUrlRef.current = objectUrl;
@@ -50,11 +50,7 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 				}
 
 				if (normalizedHandle) {
-					if (!isAuthed()) { setUrl(null); return; }
-					const cacheKey = normalizedHandle.toLowerCase();
-					const cached = inMemoryUrlCacheByHandle.get(cacheKey);
-					if (cached) { setUrl(cached); return; }
-					// We could add a handle-based helper later; for now skip.
+					// Handle-based fetch disabled for now; we only support forumId path.
 					setUrl(null);
 				}
 			} catch {
