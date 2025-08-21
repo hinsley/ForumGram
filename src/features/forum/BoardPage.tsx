@@ -133,12 +133,15 @@ export default function BoardPage() {
 	}, [currentPage, totalPages, activeThreadId, pageParam, forumId, boardId, navigate]);
 
 	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
-		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize],
+		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage, pageSize, totalPostCount],
 		queryFn: async () => {
 			if (!activeThreadId) return [] as any[];
+			const N = totalPostCount || 0;
+			const startIndex = (currentPage - 1) * pageSize;
+			const endExclusive = Math.min(startIndex + pageSize, Math.max(0, N));
+			const limit = Math.max(0, endExclusive - startIndex);
+			const addOffset = Math.max(0, N - endExclusive);
 			const input = getInputPeerForForumId(forumId);
-			const addOffset = Math.max(0, (currentPage - 1) * pageSize);
-			const limit = pageSize;
 			const items = await searchPostCardsSlice(input, String(activeThreadId), addOffset, limit);
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
@@ -210,7 +213,7 @@ export default function BoardPage() {
 			mapped.sort((a, b) => a.date - b.date);
 			return mapped as any[];
 		},
-		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
+		enabled: Number.isFinite(forumId) && Boolean(activeThreadId) && (typeof totalPostCount === 'number'),
 		staleTime: 5_000,
 	});
 
