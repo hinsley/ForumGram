@@ -4,6 +4,7 @@ import { StringSession } from 'telegram/sessions';
 import { TG_API_HASH, TG_API_ID } from './constants';
 import { getStoredSessionString } from '@state/session';
 import { computeCheck } from 'telegram/Password';
+import { getInputPeerForForumId } from '@lib/telegram/peers';
 
 let cachedClient: TelegramClient | null = null;
 let connecting: Promise<TelegramClient> | null = null;
@@ -238,4 +239,27 @@ export async function joinPublicByUsername(usernameOrAt: string) {
 		// If already a participant or cannot join (e.g., joining own), proceed to return entity
 	}
 	return channel as any;
+}
+
+export async function fetchForumProfilePhotoObjectUrlByForumId(forumId: number): Promise<string | null> {
+    try {
+        const client = await getClient();
+        const input = getInputPeerForForumId(forumId);
+        let entity: any = null;
+        try {
+            entity = await (client as any).getEntity(input);
+        } catch {}
+        if (!entity) return null;
+        try {
+            const data: any = await (client as any).downloadProfilePhoto(entity);
+            if (!data) return null;
+            const blob = data instanceof Blob ? data : new Blob([data]);
+            const url = URL.createObjectURL(blob);
+            return url;
+        } catch {
+            return null;
+        }
+    } catch {
+        return null;
+    }
 }

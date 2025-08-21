@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { getClient } from '@lib/telegram/client';
-import { getInputPeerForForumId } from '@lib/telegram/peers';
+import { fetchForumProfilePhotoObjectUrlByForumId } from '@lib/telegram/client';
 import { Api } from 'telegram';
 
 type ForumAvatarProps = {
@@ -35,29 +34,16 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 		(async () => {
 			try {
 				if (!enableRemote) { setUrl(null); return; }
-				if (typeof forumId !== 'number' && !normalizedHandle) {
-					setUrl(null);
-					return;
-				}
+				if (typeof forumId !== 'number' && !normalizedHandle) { setUrl(null); return; }
 				if (typeof forumId === 'number') {
 					const cached = inMemoryUrlCacheByForumId.get(forumId);
 					if (cached) { setUrl(cached); return; }
-					const client = await getClient();
-					let entity: any = null;
-					try {
-						const input = getInputPeerForForumId(forumId);
-						entity = await (client as any).getEntity(input);
-					} catch {}
-					if (!entity) { setUrl(null); return; }
-					try {
-						const data: any = await (client as any).downloadProfilePhoto(entity);
-						if (!data) { setUrl(null); return; }
-						const blob = data instanceof Blob ? data : new Blob([data]);
-						const objectUrl = URL.createObjectURL(blob);
+					const objectUrl = await fetchForumProfilePhotoObjectUrlByForumId(forumId);
+					if (objectUrl) {
 						inMemoryUrlCacheByForumId.set(forumId, objectUrl);
 						cleanupUrlRef.current = objectUrl;
 						if (!canceled) setUrl(objectUrl);
-					} catch {
+					} else {
 						setUrl(null);
 					}
 					return;
@@ -68,34 +54,14 @@ export default function ForumAvatar(props: ForumAvatarProps) {
 					const cacheKey = normalizedHandle.toLowerCase();
 					const cached = inMemoryUrlCacheByHandle.get(cacheKey);
 					if (cached) { setUrl(cached); return; }
-					const client = await getClient();
-					let entity: any = null;
-					try {
-						const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username: normalizedHandle } as any));
-						const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-						const chat = (res?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-						entity = channel || chat || null;
-					} catch {}
-					if (!entity) { setUrl(null); return; }
-					try {
-						const data: any = await (client as any).downloadProfilePhoto(entity);
-						if (!data) { setUrl(null); return; }
-						const blob = data instanceof Blob ? data : new Blob([data]);
-						const objectUrl = URL.createObjectURL(blob);
-						inMemoryUrlCacheByHandle.set(cacheKey, objectUrl);
-						cleanupUrlRef.current = objectUrl;
-						if (!canceled) setUrl(objectUrl);
-					} catch {
-						setUrl(null);
-					}
+					// We could add a handle-based helper later; for now skip.
+					setUrl(null);
 				}
 			} catch {
 				setUrl(null);
 			}
 		})();
-		return () => {
-			canceled = true;
-		};
+		return () => { canceled = true; };
 	}, [forumId, normalizedHandle, enableRemote]);
 
 	const dimensionStyle: CSSProperties = useMemo(() => ({ width: size, height: size }), [size]);

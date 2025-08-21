@@ -43,7 +43,7 @@ export default function ForumList() {
 			<div className="list">
 				{items.map((f) => (
 					<div className="list-item" key={f.id} onClick={() => navigate(`/forum/${f.id}`)} style={{ position: 'relative' }}>
-						<ForumAvatar forumId={f.id} size={28} alt={(f.title ?? f.username ?? String(f.id)).toString()} enableRemote={false} />
+						<ForumAvatar forumId={f.id} size={28} alt={(f.title ?? f.username ?? String(f.id)).toString()} />
 						<div className="col">
 							<div className="title">{f.title ?? (f.username ? `@${f.username}` : `Forum ${f.id}`)}</div>
 							<div className="sub">{f.isPublic ? 'Public' : 'Private'}{f.username ? ` • @${f.username}` : ''}</div>
