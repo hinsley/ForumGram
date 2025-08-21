@@ -268,12 +268,22 @@ export async function fetchForumPhotoObjectUrlByGetFile(forumId: number): Promis
     try {
         const client = await getClient();
         const input = getInputPeerForForumId(forumId);
-        let entity: any = null;
+        let photoId: any = undefined;
         try {
-            entity = await (client as any).getEntity(input);
+            if ((input as any).className === 'InputPeerChannel' || (input as any)._ === 'inputPeerChannel') {
+                const ic = new Api.InputChannel({ channelId: (input as any).channelId, accessHash: (input as any).accessHash } as any);
+                const res: any = await client.invoke(new Api.channels.GetChannels({ id: [ic] } as any));
+                const channel: any = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
+                const photo: any = channel?.photo;
+                photoId = photo?.photoId ?? photo?.photo_id ?? photo?._id ?? photo?.id;
+            } else if ((input as any).className === 'InputPeerChat' || (input as any)._ === 'inputPeerChat') {
+                const chatId = (input as any).chatId;
+                const res: any = await client.invoke(new Api.messages.GetChats({ id: [chatId] } as any));
+                const chat: any = (res?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat' || c._ === 'Chat');
+                const photo: any = chat?.photo;
+                photoId = photo?.photoId ?? photo?.photo_id ?? photo?._id ?? photo?.id;
+            }
         } catch {}
-        const photo: any = entity?.photo;
-        const photoId = photo?.photoId ?? photo?.photo_id ?? photo?.id ?? undefined;
         if (!photoId) return null;
         try {
             const location: any = new Api.InputPeerPhotoFileLocation({ peer: input as any, photoId, big: true } as any);
