@@ -106,7 +106,7 @@ export default function ForumPage() {
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
 					<div className="row" style={{ alignItems: 'center' }}>
-						<ForumAvatar forumId={forumId} size={36} alt={forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)} />
+						<ForumAvatar forumId={forumId} size={36} alt={forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)} enableRemote={false} />
 						<h3 style={{ margin: 0 }}>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
 					</div>
 					<div className="col">
