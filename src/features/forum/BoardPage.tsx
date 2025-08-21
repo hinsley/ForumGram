@@ -13,6 +13,7 @@ import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
+import { getForumAvatarUrl } from '@lib/telegram/client';
 
 export default function BoardPage() {
 	const { id, boardId, threadId } = useParams();
@@ -23,8 +24,18 @@ export default function BoardPage() {
 	const me = useSessionStore((s) => s.user);
 	const myUserId = me?.id;
 	const { isSidebarCollapsed } = useUiStore();
+	const [forumAvatarUrl, setForumAvatarUrl] = useState<string | undefined>(undefined);
 
 	useEffect(() => { initForums(); }, [initForums]);
+	useEffect(() => {
+		let canceled = false;
+		(async () => {
+			if (!Number.isFinite(forumId)) return;
+			const url = await getForumAvatarUrl(forumId, forumMeta?.accessHash);
+			if (!canceled) setForumAvatarUrl(url);
+		})();
+		return () => { canceled = true; };
+	}, [forumId, forumMeta?.accessHash]);
 
 	// Resolve current user id even if the session store has not populated yet.
 	const [resolvedUserId, setResolvedUserId] = useState<number | undefined>(typeof myUserId === 'number' ? myUserId : undefined);
@@ -399,7 +410,7 @@ export default function BoardPage() {
 			if (groupedId) {
 				try {
 					const client = await getClient();
-					const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, addOffset: 0, limit: 100 } as any));
+					const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, addOffset: 0, limit: 100 } as any }));
 					const msgs: any[] = (page.messages ?? []).filter((mm: any) => (mm.className === 'Message' || mm._ === 'message') && String(mm.groupedId ?? mm.grouped_id ?? '') === String(groupedId));
 					ids.splice(0, ids.length, ...msgs.map((mm: any) => Number(mm.id)));
 				} catch {}
@@ -426,6 +437,11 @@ export default function BoardPage() {
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
 						<div className="row" style={{ alignItems: 'center' }}>
+							<div style={{ width: 36, height: 36, borderRadius: 999, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--avatar-bg)' }}>
+								{forumAvatarUrl ? (
+									<img src={forumAvatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+								) : null}
+							</div>
 							<h3 style={{ margin: 0 }}>
 								<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 								{' > '}
@@ -471,8 +487,7 @@ export default function BoardPage() {
 												</div>
 											)}
 										</div>
-									</div>
-								))}
+									))}
 							</div>
 						)}
 					</div>
@@ -480,6 +495,11 @@ export default function BoardPage() {
 					<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
 						<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 							<div className="row" style={{ alignItems: 'center' }}>
+								<div style={{ width: 32, height: 32, borderRadius: 999, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--avatar-bg)' }}>
+									{forumAvatarUrl ? (
+										<img src={forumAvatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+									) : null}
+								</div>
 								<h3 style={{ margin: 0 }}>
 									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 									{' > '}

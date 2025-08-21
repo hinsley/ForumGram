@@ -5,6 +5,7 @@ export interface TopicRow { id: number; forumId: number; title: string; lastMsgI
 export interface MessageRow { id: number; forumId: number; topicId: number; fromId: number; date: number; textMD: string; threadTag?: string | null; threadId?: string | null; edited?: boolean; }
 export interface KvRow { key: string; value: string; }
 export interface AvatarRow { userId: number; blob: Blob; updatedAt: number; }
+export interface ForumAvatarRow { forumId: number; blob: Blob; updatedAt: number; }
 
 export class FGDB extends Dexie {
 	forums!: Table<ForumRow, number>;
@@ -12,6 +13,7 @@ export class FGDB extends Dexie {
 	messages!: Table<MessageRow, [number, number, number]>; // [forumId+topicId+id]
 	kv!: Table<KvRow, string>;
 	avatars!: Table<AvatarRow, number>;
+	forumAvatars!: Table<ForumAvatarRow, number>;
 
 	constructor() {
 		super('forumgram');
@@ -35,6 +37,14 @@ export class FGDB extends Dexie {
 			kv: 'key',
 			avatars: 'userId',
 		});
+		this.version(4).stores({
+			forums: '++id, username, addedAt',
+			topics: '[forumId+id], forumId',
+			messages: '[forumId+topicId+id], forumId, topicId, date, fromId, [forumId+fromId]',
+			kv: 'key',
+			avatars: 'userId',
+			forumAvatars: 'forumId',
+		});
 	}
 }
 
@@ -56,6 +66,15 @@ export async function getAvatarBlob(userId: number): Promise<Blob | null> {
 
 export async function setAvatarBlob(userId: number, blob: Blob): Promise<void> {
 	await db.avatars.put({ userId, blob, updatedAt: Date.now() });
+}
+
+export async function getForumAvatarBlob(forumId: number): Promise<Blob | null> {
+	const row = await db.forumAvatars.get(forumId);
+	return row?.blob ?? null;
+}
+
+export async function setForumAvatarBlob(forumId: number, blob: Blob): Promise<void> {
+	await db.forumAvatars.put({ forumId, blob, updatedAt: Date.now() });
 }
 
 export async function getActivityCount(forumId: number, userId: number): Promise<number | null> {
