@@ -61,15 +61,38 @@ export default function DiscoverPage() {
 		}
 	}
 
+	function classifyInput(input: string): { kind: 'invite'|'username'; value: string } {
+		const s = input.trim();
+		if (s.includes('t.me') || s.includes('telegram.me')) {
+			try {
+				const url = new URL(s);
+				const seg = url.pathname.split('/').filter(Boolean);
+				const last = seg[seg.length - 1] ?? '';
+				const second = seg[seg.length - 2] ?? '';
+				if (second === 'joinchat' || last.startsWith('+')) return { kind: 'invite', value: s };
+				return { kind: 'username', value: last };
+			} catch {
+				const parts = s.split('/').filter(Boolean);
+				const last = parts[parts.length - 1] ?? '';
+				const second = parts[parts.length - 2] ?? '';
+				if (second === 'joinchat' || last.startsWith('+')) return { kind: 'invite', value: s };
+				return { kind: 'username', value: last };
+			}
+		}
+		if (s.startsWith('@')) return { kind: 'username', value: s.slice(1) };
+		return { kind: 'username', value: s };
+	}
+
 	async function onJoin() {
 		try {
 			setLoading(true);
 			setError(null);
 			const inputVal = query.trim();
-			if (inputVal.startsWith('@') || (!inputVal.includes('t.me') && !inputVal.includes('telegram.me'))) {
+			const kind = classifyInput(inputVal);
+			if (kind.kind === 'username') {
 				// Public handle join
 				const { joinPublicByUsername } = await import('@lib/telegram/client');
-				const ch: any = await joinPublicByUsername(inputVal);
+				const ch: any = await joinPublicByUsername(kind.value);
 				const id = Number(ch.id);
 				const title = ch.title || ch.username || `Forum ${id}`;
 				const username = ch.username;
@@ -137,7 +160,8 @@ export default function DiscoverPage() {
 								<label className="label">Forum handle or invite</label>
 								<div className="form-row">
 									<input className="input" placeholder="@my_forum or https://t.me/+hash" value={query} onChange={(e) => setQuery(e.target.value)} />
-									<button className="btn primary" onClick={onResolve} disabled={!query || loading}>Join</button>
+									<button className="btn primary" onClick={onJoin} disabled={!query || loading}>Join</button>
+									<button className="btn" onClick={onResolve} disabled={!query || loading}>Preview</button>
 								</div>
 							</div>
 							{error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
