@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useForumsStore } from '@state/forums';
+import ForumAvatar from '@components/ForumAvatar';
 
 export default function ForumList() {
 	const forums = useForumsStore((s) => s.forums);
@@ -42,6 +43,7 @@ export default function ForumList() {
 			<div className="list">
 				{items.map((f) => (
 					<div className="list-item" key={f.id} onClick={() => navigate(`/forum/${f.id}`)} style={{ position: 'relative' }}>
+						<ForumAvatar forumId={f.id} size={28} alt={(f.title ?? f.username ?? String(f.id)).toString()} enableRemote={false} />
 						<div className="col">
 							<div className="title">{f.title ?? (f.username ? `@${f.username}` : `Forum ${f.id}`)}</div>
 							<div className="sub">{f.isPublic ? 'Public' : 'Private'}{f.username ? ` • @${f.username}` : ''}</div>

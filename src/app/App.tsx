@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import LoginPage from '@features/auth/LoginPage';
 import DiscoverPage from '@features/catalog/DiscoverPage';
@@ -5,7 +6,6 @@ import ForumPage from '@features/forum/ForumPage';
 import SettingsPage from '@features/settings/SettingsPage';
 import { useSessionStore } from '@state/session';
 import BoardPage from '@features/forum/BoardPage';
-import { useEffect } from 'react';
 import { useSettingsStore } from '@state/settings';
 
 function Header() {
@@ -38,6 +38,19 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 	return <>{children}</>;
 }
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+	constructor(props: any) {
+		super(props);
+		this.state = { hasError: false };
+	}
+	static getDerivedStateFromError() { return { hasError: true }; }
+	componentDidCatch(error: any, info: any) { try { console.error('App error:', error, info); } catch {} }
+	render() {
+		if (this.state.hasError) return <div style={{ padding: 16 }}>Something went wrong. Try reloading.</div>;
+		return this.props.children as any;
+	}
+}
+
 export default function App() {
 	const theme = useSettingsStore((s) => s.theme);
 	useEffect(() => {
@@ -46,15 +59,17 @@ export default function App() {
 	return (
 		<div className="app-shell">
 			<Header />
-			<Routes>
-				<Route path="/login" element={<LoginPage />} />
-				<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
-				<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
-				<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
-				<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
-				<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-				<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
-			</Routes>
+			<ErrorBoundary>
+				<Routes>
+					<Route path="/login" element={<LoginPage />} />
+					<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
+					<Route path="/forum/:id" element={<RequireAuth><ForumPage /></RequireAuth>} />
+					<Route path="/forum/:id/board/:boardId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+					<Route path="/forum/:id/board/:boardId/thread/:threadId" element={<RequireAuth><BoardPage /></RequireAuth>} />
+					<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+					<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
+				</Routes>
+			</ErrorBoundary>
 		</div>
 	);
 }

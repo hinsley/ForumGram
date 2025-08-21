@@ -10,7 +10,12 @@ export default function FeaturedForums({ onSelect }: { onSelect: (address: strin
 			<div className="gallery">
 				{items.map((f) => (
 					<div key={f.address} className="chiclet" onClick={() => onSelect(f.address)}>
-						<div className="title">{f.name}</div>
+						<div className="row" style={{ alignItems: 'center' }}>
+							<div className="forum-avatar placeholder" style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--muted)', fontSize: 12 }}>
+								{(f.name || f.address || '').trim().slice(0, 1).toUpperCase()}
+							</div>
+							<div className="title">{f.name}</div>
+						</div>
 						<div className="sub">{f.address}</div>
 						<p style={{ margin: 0 }}>{f.description}</p>
 					</div>
