@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
-import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash } from '@lib/protocol';
+import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash, getLastPostForBoard } from '@lib/protocol';
 import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
@@ -29,6 +29,33 @@ export default function ForumPage() {
 		},
 		enabled: Number.isFinite(forumId),
 	});
+
+	const { data: lastPostByBoardId = {}, isLoading: loadingLastPosts } = useQuery<{ [boardId: string]: any }>({
+		queryKey: ['last-post-by-board', forumId, (data ?? []).map((b) => b.id)],
+		queryFn: async () => {
+			const input = getInputPeerForForumId(forumId);
+			const entries = await Promise.all((data ?? []).map(async (b) => {
+				const lp = await getLastPostForBoard(input, b.id);
+				return [b.id, lp] as const;
+			}));
+			return Object.fromEntries(entries);
+		},
+		enabled: Number.isFinite(forumId) && (data ?? []).length > 0,
+		staleTime: 5_000,
+	});
+
+	function formatDateTime(epochSeconds?: number): string {
+		if (!epochSeconds) return '';
+		const d = new Date(epochSeconds * 1000);
+		const pad = (n: number) => String(n).padStart(2, '0');
+		const yyyy = d.getFullYear();
+		const mm = pad(d.getMonth() + 1);
+		const dd = pad(d.getDate());
+		const hh = pad(d.getHours());
+		const mi = pad(d.getMinutes());
+		const ss = pad(d.getSeconds());
+		return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+	}
 
 	async function onCreateBoard() {
 		try {
@@ -105,6 +132,14 @@ export default function ForumPage() {
 										{(b.description) && (
 											<div className="sub">{b.description}</div>
 										)}
+										{(() => {
+											const lp: any = (lastPostByBoardId as any)[b.id];
+											if (!lp) return null;
+											const uname = lp.user?.username ? `@${lp.user.username}` : [lp.user?.firstName, lp.user?.lastName].filter(Boolean).join(' ') || 'unknown';
+											return (
+												<div className="sub">Last post by {uname} at {formatDateTime(lp.date)}</div>
+											);
+										})()}
 										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
 											<button className="btn ghost" onClick={() => setOpenMenuForBoardId(openMenuForBoardId === b.id ? null : b.id)} title="More">⋯</button>
 											{openMenuForBoardId === b.id && (
