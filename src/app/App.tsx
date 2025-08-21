@@ -20,9 +20,9 @@ function Header() {
 			<nav className="header-actions">
 				<NavLink to="/settings" className="btn ghost" title="Settings" aria-label="Settings">⚙️</NavLink>
 				{isAuthenticated ? (
-					<button className="btn" onClick={() => { logout(); navigate('/login'); }}>Logout</button>
+					<button className="btn" onClick={() => { logout(); navigate('/login'); }}>Log out</button>
 				) : (
-					<NavLink to="/login" className="btn primary">Login</NavLink>
+					<NavLink to="/login" className="btn primary">Log in</NavLink>
 				)}
 			</nav>
 		</header>
