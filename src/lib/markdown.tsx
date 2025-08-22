@@ -58,23 +58,26 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 				rehypePlugins={rehypePlugins}
 				remarkPlugins={[remarkGfm, remarkMath]}
 									components={{
-						code({ node, inline, className, children, ...props }: any) {
+												code({ node, inline, className, children, ...props }: any) {
 							const match = /language-([\w-]+)/.exec(className || '');
-							if (inline) {
+							const codeText = String(children ?? '');
+							const hasNewline = codeText.includes('\n');
+							const hasLanguage = Boolean(match && match[1]);
+							if (inline || (!hasLanguage && !hasNewline)) {
 								return (
 									<code className="inline-code" {...props}>{children}</code>
 								);
 							}
 							const language = match?.[1] || 'text';
 							return (
-<div className="code-block">
-								<div className="code-lang">{language}</div>
-								<pre className={className}>
-									<code className={className} {...props}>{children}</code>
-								</pre>
-							</div>
-						);
-					},
+								<div className="code-block">
+									<div className="code-lang">{language}</div>
+									<pre className={className}>
+										<code className={className} {...props}>{children}</code>
+									</pre>
+								</div>
+							);
+						},
 					img({ node, ...props }: any) {
 						const style = {
 							maxWidth: `${imageMaxWidthPx}px`,
