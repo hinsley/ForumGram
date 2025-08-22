@@ -63,7 +63,7 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 							const codeText = String(children ?? '');
 							const hasNewline = codeText.includes('\n');
 							const hasLanguage = Boolean(match && match[1]);
-							if (inline || (!hasLanguage && !hasNewline)) {
+							if (inline || !hasNewline) {
 								return (
 									<code className="inline-code" {...props}>{children}</code>
 								);
