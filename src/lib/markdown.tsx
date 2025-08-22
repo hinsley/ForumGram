@@ -6,7 +6,6 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { useSettingsStore } from '@state/settings';
 import 'katex/dist/katex.min.css';
-import 'highlight.js/styles/github-dark.css';
 
 interface MarkdownViewProps {
 	text: string;
@@ -16,7 +15,16 @@ interface MarkdownViewProps {
 export default function MarkdownView({ text, className }: MarkdownViewProps) {
 	const { markdownEnabled, katexEnabled, imageMaxWidthPx } = useSettingsStore();
 	if (!markdownEnabled) {
-		return <pre className={className}>{text}</pre>;
+		return (
+			<div className={`md ${className ?? ''}`}>
+				<div className="code-block">
+					<div className="code-lang">text</div>
+					<pre>
+						<code>{text}</code>
+					</pre>
+				</div>
+			</div>
+		);
 	}
 	// Preserve math classes through sanitization so rehype-katex can detect them.
 	const sanitizeOptions: any = {
