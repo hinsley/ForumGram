@@ -264,34 +264,45 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 		seenMsgIds.add(msgId);
 		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 	}
+	return items;
+}
 
-	// Fallback: also scan recent history to merge very fresh posts (handles indexing/tokenization delays).
-	if (items.length < queryLimit) {
-		let offsetId = 0;
-		const pageSize = Math.min(100, queryLimit);
-		let pages = 0;
-		while (items.length < queryLimit && pages < 30) {
-			const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, offsetId, addOffset: 0, limit: pageSize }));
-			(page.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
-			const batch: any[] = (page.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
-			if (!batch.length) break;
-			for (const m of batch) {
-				const msgId = Number(m.id);
-				if (seenMsgIds.has(msgId)) continue;
-				const parsed = parsePostCard(m.message ?? '');
-				if (!parsed) continue;
-				if (parsed.parentThreadId !== parentThreadId) continue;
-				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
-				seenMsgIds.add(msgId);
-				items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
-				if (items.length >= queryLimit) break;
-			}
-			// pagination: next offset is the last message id in this batch.
-			offsetId = Number(batch[batch.length - 1].id);
-			pages++;
-		}
+export async function countPostsForThread(input: Api.TypeInputPeer, parentThreadId: string): Promise<number> {
+	const client = await getClient();
+	const q = `${parentThreadId}`;
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: 1, filter: new Api.InputMessagesFilterEmpty() }));
+	const count: number | undefined = (res && (res.count ?? res.total ?? res._count)) as any;
+	if (typeof count === 'number' && count >= 0) return count;
+	const msgs: any[] = (res?.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	let matched = 0;
+	for (const m of msgs) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (parsed && parsed.parentThreadId === parentThreadId) matched++;
 	}
+	return matched;
+}
 
+export async function searchPostCardsSlice(
+	input: Api.TypeInputPeer,
+	parentThreadId: string,
+	addOffset: number,
+	limit: number,
+): Promise<PostCard[]> {
+	const client = await getClient();
+	const q = `fg.post ${parentThreadId}`;
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(0, limit), addOffset: Math.max(0, addOffset), filter: new Api.InputMessagesFilterEmpty() }));
+	const usersMap: Record<string, any> = {};
+	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+	const items: PostCard[] = [];
+	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	for (const m of messages) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (!parsed) continue;
+		if (parsed.parentThreadId !== parentThreadId) continue;
+		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+		const msgId = Number(m.id);
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+	}
 	return items;
 }
 
@@ -301,13 +312,13 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
  * relying on server-side search ordering.
  */
 export async function getLastPostForThread(input: Api.TypeInputPeer, parentThreadId: string, queryLimit: number = 100): Promise<PostCard | null> {
-    const items = await searchPostCards(input, parentThreadId, queryLimit);
-    if (!items.length) return null;
-    let latest: PostCard | null = null;
-    for (const p of items) {
-        if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
-    }
-    return latest;
+	const items = await searchPostCards(input, parentThreadId, queryLimit);
+	if (!items.length) return null;
+	let latest: PostCard | null = null;
+	for (const p of items) {
+		if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
+	}
+	return latest;
 }
 
 /**
@@ -315,21 +326,123 @@ export async function getLastPostForThread(input: Api.TypeInputPeer, parentThrea
  * Scans a limited number of most recent threads to balance performance.
  */
 export async function getLastPostForBoard(
-    input: Api.TypeInputPeer,
-    parentBoardId: string,
-    perThreadPostQueryLimit: number = 50,
-    maxThreadsToScan: number = 30,
+	input: Api.TypeInputPeer,
+	parentBoardId: string,
+	perThreadPostQueryLimit: number = 50,
+	maxThreadsToScan: number = 30,
 ): Promise<PostCard | null> {
-    const threads = await searchThreadCards(input, parentBoardId, 500);
-    // Prioritize newest threads first (by creation date as a heuristic)
-    const sorted = [...threads].sort((a, b) => (b.date ?? 0) - (a.date ?? 0)).slice(0, Math.max(1, maxThreadsToScan));
-    const results = await Promise.all(sorted.map(t => getLastPostForThread(input, t.id, perThreadPostQueryLimit)));
-    const nonNull = results.filter(Boolean) as PostCard[];
-    if (!nonNull.length) return null;
-    let latest: PostCard | null = null;
-    for (const p of nonNull) {
-        if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
-    }
-    return latest;
+	const threads = await searchThreadCards(input, parentBoardId, 500);
+	// Prioritize newest threads first (by creation date as a heuristic)
+	const sorted = [...threads].sort((a, b) => (b.date ?? 0) - (a.date ?? 0)).slice(0, Math.max(1, maxThreadsToScan));
+	const results = await Promise.all(sorted.map(t => getLastPostForThread(input, t.id, perThreadPostQueryLimit)));
+	const nonNull = results.filter(Boolean) as PostCard[];
+	if (!nonNull.length) return null;
+	let latest: PostCard | null = null;
+	for (const p of nonNull) {
+		if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
+	}
+	return latest;
 }
 
+export async function searchPostCardsPage(
+	input: Api.TypeInputPeer,
+	parentThreadId: string,
+	pagesFromLatest: number,
+	pageSize: number,
+): Promise<PostCard[]> {
+	const client = await getClient();
+	const usersMap: Record<string, any> = {};
+	let maxId = 0; // 0 means no upper bound (newest)
+	// Step over pagesFromLatest batches to land at the requested page window
+	for (let step = 0; step < Math.max(0, pagesFromLatest); step++) {
+		const q = `fg.post ${parentThreadId}`;
+		const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(1, pageSize), maxId: maxId || undefined, addOffset: 0, filter: new Api.InputMessagesFilterEmpty() }));
+		(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+		const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+		if (!messages.length) break;
+		// Compute next maxId as strictly older than the oldest we just saw
+		const oldestIdInBatch = messages.reduce((min, m) => Math.min(min, Number(m.id)), Number.MAX_SAFE_INTEGER);
+		maxId = oldestIdInBatch - 1;
+	}
+	// Fetch the target page window
+	const q = `fg.post ${parentThreadId}`;
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(1, pageSize), maxId: maxId || undefined, addOffset: 0, filter: new Api.InputMessagesFilterEmpty() }));
+	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+	const items: PostCard[] = [];
+	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	for (const m of messages) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (!parsed) continue;
+		if (parsed.parentThreadId !== parentThreadId) continue;
+		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+		const msgId = Number(m.id);
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+	}
+	return items;
+}
+
+export async function searchPostCardsPageByOffset(
+	input: Api.TypeInputPeer,
+	parentThreadId: string,
+	pagesFromLatest: number,
+	pageSize: number,
+): Promise<PostCard[]> {
+	const client = await getClient();
+	const usersMap: Record<string, any> = {};
+	let offsetId = 0;
+	const q = `fg.post ${parentThreadId}`;
+	// step through pages to land on the requested window
+	for (let step = 0; step < Math.max(0, pagesFromLatest); step++) {
+		const resStep: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(1, pageSize), offsetId, addOffset: 0, filter: new Api.InputMessagesFilterEmpty() }));
+		(resStep.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+		const messagesStep: any[] = (resStep.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+		if (!messagesStep.length) break;
+		offsetId = Number(messagesStep[messagesStep.length - 1].id);
+	}
+	// fetch the target page
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(1, pageSize), offsetId, addOffset: 0, filter: new Api.InputMessagesFilterEmpty() }));
+	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+	const items: PostCard[] = [];
+	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	for (const m of messages) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (!parsed) continue;
+		if (parsed.parentThreadId !== parentThreadId) continue;
+		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+		const msgId = Number(m.id);
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+	}
+	return items;
+}
+
+export async function searchPostCardsPageByOffsetNew(
+	input: Api.TypeInputPeer,
+	parentThreadId: string,
+	pagesFromLatest: number,
+	pageSize: number,
+): Promise<PostCard[]> {
+	const client = await getClient();
+	const usersMap: Record<string, any> = {};
+	let offsetId = 0;
+	const q = `${parentThreadId}`;
+	for (let step = 0; step < Math.max(0, pagesFromLatest); step++) {
+		const resStep: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(1, pageSize), offsetId, addOffset: 0, filter: new Api.InputMessagesFilterEmpty() }));
+		(resStep.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+		const messagesStep: any[] = (resStep.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+		if (!messagesStep.length) break;
+		offsetId = Number(messagesStep[messagesStep.length - 1].id);
+	}
+	const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: Math.max(1, pageSize), offsetId, addOffset: 0, filter: new Api.InputMessagesFilterEmpty() }));
+	(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+	const items: PostCard[] = [];
+	const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+	for (const m of messages) {
+		const parsed = parsePostCard(m.message ?? '');
+		if (!parsed) continue;
+		if (parsed.parentThreadId !== parentThreadId) continue;
+		const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+		const msgId = Number(m.id);
+		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+	}
+	return items;
+}
