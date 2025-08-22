@@ -225,7 +225,7 @@ a:hover { text-decoration: underline; }
 /* Markdown defaults */
 .md :where(h1,h2,h3,h4) { margin: 12px 0 8px; }
 .md :where(p,ul,ol) { margin: 8px 0; }
-.md code { background: var(--code-bg); border: 1px solid var(--border); padding: 1px 4px; border-radius: 6px; }
+.md :not(pre) > code { display: inline; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; color: var(--muted); background: transparent; border: 0; padding: 0 3px; font-style: normal; font-weight: normal; text-decoration: none; }
 .md pre { background: var(--code-bg); border: 1px solid var(--border); padding: 8px; border-radius: 10px; overflow: auto; }
 
 /* Code block wrapper with language header */

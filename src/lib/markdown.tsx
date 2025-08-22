@@ -37,7 +37,7 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 			code: [
 				...((defaultSchema as any).attributes?.code || []),
 				// allow language and hljs classes on code.
-				['className', 'hljs', /^language[-_a-z0-9]+$/]
+				['className', 'hljs', /^language[-_a-z0-9]+$/, 'inline-code']
 			],
 			pre: [
 				...((defaultSchema as any).attributes?.pre || []),
@@ -57,24 +57,23 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 			<ReactMarkdown
 				rehypePlugins={rehypePlugins}
 				remarkPlugins={[remarkGfm, remarkMath]}
-				components={{
-					code({ node, inline, className, children, ...props }: any) {
-						const match = /language-([\w-]+)/.exec(className || '');
-						if (inline) {
+									components={{
+						pre({ children }: any) {
+							const child = Array.isArray(children) ? children[0] : children;
+							const childProps: any = (child as any)?.props || {};
+							const className: string = childProps.className || '';
+							const match = /language-([\w-]+)/.exec(className || '');
+							const language = match?.[1] || 'text';
+							const codeChildren = childProps.children;
 							return (
-								<code className={className} {...props}>{children}</code>
+								<div className="code-block">
+									<div className="code-lang">{language}</div>
+									<pre className={className}>
+										<code className={className}>{codeChildren}</code>
+									</pre>
+								</div>
 							);
-						}
-						const language = match?.[1] || 'text';
-						return (
-							<div className="code-block">
-								<div className="code-lang">{language}</div>
-								<pre className={className}>
-									<code className={className} {...props}>{children}</code>
-								</pre>
-							</div>
-						);
-					},
+						},
 					img({ node, ...props }: any) {
 						const style = {
 							maxWidth: `${imageMaxWidthPx}px`,
