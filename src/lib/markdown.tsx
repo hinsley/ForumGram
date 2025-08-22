@@ -60,10 +60,7 @@ export default function MarkdownView({ text, className }: MarkdownViewProps) {
 									components={{
 												code({ node, inline, className, children, ...props }: any) {
 							const match = /language-([\w-]+)/.exec(className || '');
-							const codeText = String(children ?? '');
-							const hasNewline = codeText.includes('\n');
-							const hasLanguage = Boolean(match && match[1]);
-							if (inline || !hasNewline) {
+							if (inline) {
 								return (
 									<code className="inline-code" {...props}>{children}</code>
 								);
