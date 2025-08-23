@@ -264,34 +264,6 @@ export async function searchPostCards(input: Api.TypeInputPeer, parentThreadId: 
 		seenMsgIds.add(msgId);
 		items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
 	}
-
-	// Fallback: also scan recent history to merge very fresh posts (handles indexing/tokenization delays).
-	if (items.length < queryLimit) {
-		let offsetId = 0;
-		const pageSize = Math.min(100, queryLimit);
-		let pages = 0;
-		while (items.length < queryLimit && pages < 30) {
-			const page: any = await client.invoke(new Api.messages.GetHistory({ peer: input, offsetId, addOffset: 0, limit: pageSize }));
-			(page.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
-			const batch: any[] = (page.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
-			if (!batch.length) break;
-			for (const m of batch) {
-				const msgId = Number(m.id);
-				if (seenMsgIds.has(msgId)) continue;
-				const parsed = parsePostCard(m.message ?? '');
-				if (!parsed) continue;
-				if (parsed.parentThreadId !== parentThreadId) continue;
-				const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
-				seenMsgIds.add(msgId);
-				items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
-				if (items.length >= queryLimit) break;
-			}
-			// pagination: next offset is the last message id in this batch.
-			offsetId = Number(batch[batch.length - 1].id);
-			pages++;
-		}
-	}
-
 	return items;
 }
 
@@ -331,5 +303,78 @@ export async function getLastPostForBoard(
         if (!latest || (p.date ?? 0) > (latest.date ?? 0)) latest = p;
     }
     return latest;
+}
+
+// ---- Pagination helpers ----
+
+/**
+ * Count posts within a thread using Telegram's messages.search count field.
+ */
+export async function countPostsInThread(input: Api.TypeInputPeer, parentThreadId: string): Promise<number> {
+    const client = await getClient();
+    const q = `fg.post ${parentThreadId}`;
+    // Use limit=0 to request only the count; Telegram suggests conflictingly
+	// that 0 will faux-reset itself to 10 and also that it will not do that in
+	// two separate places in the documentation.
+    // Fall back to limit=1 if count is absent.
+    const res: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: 0, filter: new Api.InputMessagesFilterEmpty() }));
+    const countFromRes = (typeof res?.count === 'number') ? res.count : undefined;
+    if (typeof countFromRes === 'number') return countFromRes;
+    try {
+        const res2: any = await client.invoke(new Api.messages.Search({ peer: input, q, limit: 1, filter: new Api.InputMessagesFilterEmpty() }));
+        return (typeof res2?.count === 'number') ? res2.count : (Array.isArray(res2?.messages) ? res2.messages.length : 0);
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Fetch a specific page of posts (oldest-first pagination) using addOffset and negative limit.
+ * Page 1 is the oldest page. Page size defaults to 10.
+ * See Telegram offset semantics: core.telegram.org/api/offsets
+ */
+export async function fetchPostPage(
+    input: Api.TypeInputPeer,
+    parentThreadId: string,
+    page: number,
+    pageSize: number = 10,
+): Promise<{ items: PostCard[]; count: number; pages: number }> {
+    const client = await getClient();
+    const q = `fg.post ${parentThreadId}`;
+    const count = await countPostsInThread(input, parentThreadId);
+    const totalPages = Math.max(1, Math.ceil(Math.max(0, count) / pageSize));
+    const clampedPage = Math.min(Math.max(1, page), totalPages);
+    const lastPageLength = count === 0 ? 0 : ((count - 1) % pageSize) + 1;
+    const isLastPage = clampedPage === totalPages;
+    const addOffset = (count === 0)
+        ? 0
+        : (isLastPage ? 0 : (lastPageLength + Math.max(0, (totalPages - clampedPage - 1)) * pageSize));
+    const limit = count === 0
+        ? 0
+        : (isLastPage ? lastPageLength : pageSize);
+
+    const res: any = await client.invoke(new Api.messages.Search({
+        peer: input,
+        q,
+        addOffset,
+        limit,
+        filter: new Api.InputMessagesFilterEmpty(),
+    } as any));
+
+    const usersMap: Record<string, any> = {};
+    (res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+    const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+    const items: PostCard[] = [];
+    for (const m of messages) {
+        const parsed = parsePostCard(m.message ?? '');
+        if (!parsed) continue;
+        if (parsed.parentThreadId !== parentThreadId) continue;
+        const fromUserId: number | undefined = m.fromId?.userId ? Number(m.fromId.userId) : undefined;
+        const msgId = Number(m.id);
+        items.push({ id: parsed.id, parentThreadId, messageId: msgId, fromUserId, user: fromUserId ? usersMap[String(fromUserId)] : undefined, date: Number(m.date), content: parsed.data.content, media: m.media, groupedId: m.groupedId ? String(m.groupedId) : undefined });
+    }
+    // Ensure oldest-first order within page.
+    items.sort((a, b) => (a.date ?? 0) - (b.date ?? 0));
+    return { items, count, pages: totalPages };
 }
 

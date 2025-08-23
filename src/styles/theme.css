@@ -180,9 +180,14 @@ a:hover { text-decoration: underline; }
 .btn.primary { background: linear-gradient(180deg, var(--accent), var(--accent-2)); color: #071219; border-color: transparent; }
 .btn.ghost { background: transparent; box-shadow: none; }
 
-.content { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
-.sidebar { border-right: 1px solid var(--border); background: var(--bg-elev); padding: 12px; overflow: auto; }
-.main { padding: 12px; overflow: hidden; }
+.content { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 56px); }
+.sidebar { border-right: 1px solid var(--border); background: var(--bg-elev); padding: 12px; overflow: auto; position: sticky; top: 56px; height: calc(100vh - 56px); scrollbar-width: none; -ms-overflow-style: none; }
+.sidebar::-webkit-scrollbar { display: none; }
+.main { padding: 12px; overflow: auto; height: 100%; scrollbar-width: none; -ms-overflow-style: none; }
+.main::-webkit-scrollbar { display: none; }
+/* Hide scrollbars for any nested scrollable areas inside content viewport */
+.main * { scrollbar-width: none; -ms-overflow-style: none; }
+.main *::-webkit-scrollbar { display: none; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
 
 /* Lists */

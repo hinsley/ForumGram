@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
-import { ThreadMeta, searchThreadCards, searchPostCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread } from '@lib/protocol';
+import { ThreadMeta, searchThreadCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread, fetchPostPage } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob } from '@lib/db';
@@ -15,7 +15,7 @@ import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
 
 export default function BoardPage() {
-	const { id, boardId, threadId } = useParams();
+	const { id, boardId, threadId, page } = useParams();
 	const forumId = Number(id);
 	const navigate = useNavigate();
 	const initForums = useForumsStore((s) => s.initFromStorage);
@@ -97,12 +97,21 @@ export default function BoardPage() {
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
 
-	const { data: posts = [], isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery({
-		queryKey: ['posts', forumId, boardId, activeThreadId],
+	// Normalize current page, default to 1 and redirect to include page param if missing.
+	const currentPage = Math.max(1, Number.isFinite(Number(page)) ? Number(page) : 1);
+	useEffect(() => {
+		// Only redirect when the URL actually contains a threadId but lacks a page.
+		if (threadId && !page) {
+			navigate(`/forum/${forumId}/board/${boardId}/thread/${threadId}/page/1`, { replace: true });
+		}
+	}, [threadId, page, forumId, boardId, navigate]);
+
+	const { data: pageData, isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery<{ items: any[]; count: number; pages: number }>({
+		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage],
 		queryFn: async () => {
-			if (!activeThreadId) return [] as any[];
+			if (!activeThreadId) return { items: [] as any[], count: 0, pages: 1 };
 			const input = getInputPeerForForumId(forumId);
-			const items = await searchPostCards(input, String(activeThreadId));
+			const { items, count, pages } = await fetchPostPage(input, String(activeThreadId), currentPage, 10);
 			// Build author map and load avatars once per unique user.
 			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
 			const client = await getClient();
@@ -137,7 +146,6 @@ export default function BoardPage() {
 					userIdToUrl[uid] = undefined;
 				}
 			}
-			// Map to display messages, preserving metadata used by both branches.
 			const mapped = items.map((p) => ({
 				id: p.messageId,
 				from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
@@ -171,7 +179,7 @@ export default function BoardPage() {
 				canDelete: false,
 			}));
 			mapped.sort((a, b) => a.date - b.date);
-			return mapped as any[];
+			return { items: mapped as any[], count, pages };
 		},
 		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
 		staleTime: 5_000,
@@ -228,6 +236,8 @@ export default function BoardPage() {
 	const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
 	const [isEditing, setIsEditing] = useState(false);
 	const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+	const [showPostSubmitted, setShowPostSubmitted] = useState(false);
+	const hidePostSubmittedTimerRef = useRef<number | undefined>(undefined);
 
 	async function prepareUploadedInputMedia(uploaded: any, file: File): Promise<PreparedInputMedia> {
 		// Always send uploads as files (documents).
@@ -318,13 +328,15 @@ export default function BoardPage() {
 					const firstText = composePostCard(idHash, activeThreadId, { content: composerText });
 					await sendMediaMessage(input, firstText, prepared[0]!.inputMedia);
 				}
+				try { if (hidePostSubmittedTimerRef.current) { clearTimeout(hidePostSubmittedTimerRef.current); } } catch {}
+				setShowPostSubmitted(true);
+				hidePostSubmittedTimerRef.current = window.setTimeout(() => { setShowPostSubmitted(false); }, 10000);
 			}
 
 			setComposerText('');
 			setDraftAttachments([]);
 			setIsEditing(false);
 			setEditingMessageId(null);
-			setTimeout(() => { refetchPosts(); }, 250);
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to send post');
 		}
@@ -423,6 +435,11 @@ export default function BoardPage() {
 			</aside>
 			<SidebarToggle />
 			<main className="main">
+				{showPostSubmitted && (
+					<div onClick={() => setShowPostSubmitted(false)} style={{ position: 'fixed', top: 56, left: 0, right: 0, zIndex: 20, display: 'flex', justifyContent: 'center' }}>
+						<div className="card" style={{ padding: 8, cursor: 'pointer' }}>Post submitted. It should become visible within a few minutes.</div>
+					</div>
+				)}
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
 						<div className="row" style={{ alignItems: 'center' }}>
@@ -444,7 +461,7 @@ export default function BoardPage() {
 						) : (
 							<div className="gallery boards" style={{ marginTop: 12 }}>
 								{threads.map((t) => (
-									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}`); }}>
+									<div key={t.id} className="chiclet" style={{ position: 'relative' }} onClick={() => { setSelectedThreadId(t.id); navigate(`/forum/${forumId}/board/${boardId}/thread/${t.id}/page/1`); }}>
 										<div className="title">{t.title}</div>
 										{(() => {
 											const lp: any = (lastPostByThreadId as any)[t.id];
@@ -478,8 +495,9 @@ export default function BoardPage() {
 					</div>
 				) : (
 					<div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-						<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
-							<div className="row" style={{ alignItems: 'center' }}>
+						<div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+							<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
+								<div className="row" style={{ alignItems: 'center' }}>
 								<h3 style={{ margin: 0 }}>
 									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 									{' > '}
@@ -488,12 +506,31 @@ export default function BoardPage() {
 									<span>{activeThread ? activeThread.title : 'Thread'}</span>
 								</h3>
 								<div className="spacer" />
+								{(() => {
+									const totalPages = pageData?.pages ?? 1;
+									const onFirst = () => activeThreadId && navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`);
+									const onPrev = () => activeThreadId && navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.max(1, currentPage - 1)}`);
+									const onNext = () => activeThreadId && navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${Math.min(totalPages, currentPage + 1)}`);
+									const onLast = () => activeThreadId && navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/${totalPages}`);
+									const atFirst = currentPage <= 1;
+									const atLast = currentPage >= totalPages;
+									return (
+										<div className="row" style={{ alignItems: 'center', gap: 6 }}>
+											<button className="btn" disabled={atFirst} onClick={onFirst} title="First">⏮️</button>
+											<button className="btn" disabled={atFirst} onClick={onPrev} title="Previous">◀️</button>
+											<button className="btn" disabled={atLast} onClick={onNext} title="Next">▶️</button>
+											<button className="btn" disabled={atLast} onClick={onLast} title="Last">⏭️</button>
+											<div style={{ marginLeft: 8, color: 'var(--muted)' }}>{currentPage}/{totalPages}</div>
+										</div>
+									);
+								})()}
+								</div>
 							</div>
-						</div>
-						<div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
+							<div style={{ padding: 0 }}>
 							{loadingPosts ? <div style={{ padding: 12 }}>Loading...</div> : postsError ? <div style={{ padding: 12, color: 'var(--danger)' }}>{(postsError as any)?.message ?? 'Error'}</div> : (
-								<MessageList messages={posts as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
+								<MessageList messages={(pageData?.items ?? []) as any[]} currentUserId={resolvedUserId} onEditPost={onEditPost} onDeletePost={onDeletePost} />
 							)}
+							</div>
 						</div>
 						<div className="composer">
 							<div className="col" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
