@@ -140,7 +140,10 @@ export default function ForumList() {
 							</div>
 							<div className="col">
 								<div className="title">{f.title ?? (f.username ? `@${f.username}` : `Forum ${f.id}`)}</div>
-								<div className="sub">{f.isPublic ? 'Public' : 'Private'}{f.username ? ` • @${f.username}` : ''}</div>
+								<div className="sub" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+									<div>{f.isPublic ? 'Public' : 'Private'}</div>
+									{f.username && <div style={{ fontSize: '11px' }}>@{f.username}</div>}
+								</div>
 							</div>
 						</div>
 						<div className="spacer" />
