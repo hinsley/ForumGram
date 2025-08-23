@@ -106,7 +106,7 @@ export default function BoardPage() {
 		}
 	}, [threadId, page, forumId, boardId, navigate]);
 
-	const { data: pageData, isLoading: loadingPosts, error: postsError, refetch: refetchPosts } = useQuery<{ items: any[]; count: number; pages: number }>({
+	const { data: pageData, isLoading: loadingPosts, error: postsError } = useQuery<{ items: any[]; count: number; pages: number }>({
 		queryKey: ['posts', forumId, boardId, activeThreadId, currentPage],
 		queryFn: async () => {
 			if (!activeThreadId) return { items: [] as any[], count: 0, pages: 1 };
@@ -305,6 +305,8 @@ export default function BoardPage() {
 				const newText = composePostCard(cardIdToKeep, activeThreadId, { content: composerText });
 				try {
 					await editMessage(input, editingMessageId, newText);
+					try { window.location.reload(); } catch {}
+					return;
 				} catch (e: any) {
 					const msg: string = String(e?.message || e?.errorMessage || 'Failed to edit');
 					if (msg.toUpperCase().includes('MESSAGE_EDIT_TIME_EXPIRED')) {
@@ -417,7 +419,7 @@ export default function BoardPage() {
 				} catch {}
 			}
 			await deleteMessages(input, ids);
-			setTimeout(() => { refetchPosts(); }, 250);
+			try { window.location.reload(); } catch {}
 		} catch (e: any) {
 			alert(e?.message ?? 'Failed to delete post');
 		}
