@@ -518,37 +518,52 @@ export default function BoardPage() {
 					<div className="card" style={{ padding: 12 }}>
 						<div className="row" style={{ alignItems: 'center' }}>
 							<div className="row" style={{ alignItems: 'center', gap: 12 }}>
-								<div style={{
-									width: 32,
-									height: 32,
-									borderRadius: 16,
-									backgroundColor: 'var(--border)',
-									display: 'flex',
-									alignItems: 'center',
-									justifyContent: 'center',
-									flexShrink: 0,
-									overflow: 'hidden'
-								}}>
-									{forumAvatarUrl ? (
-										<img
-											src={forumAvatarUrl}
-											alt=""
-											style={{
-												width: '100%',
-												height: '100%',
-												objectFit: 'cover'
-											}}
-										/>
-									) : (
-										<div style={{
-											fontSize: 16,
-											color: 'var(--muted)',
-											fontWeight: 'bold'
-										}}>
-											{forumTitle.charAt(0).toUpperCase()}
-										</div>
-									)}
-								</div>
+								<Link
+									to={`/forum/${forumId}`}
+									style={{
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										flexShrink: 0,
+										textDecoration: 'none'
+									}}
+								>
+									<div style={{
+										width: 32,
+										height: 32,
+										borderRadius: 16,
+										backgroundColor: 'var(--border)',
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										overflow: 'hidden',
+										cursor: 'pointer',
+										transition: 'transform 0.1s ease'
+									}}
+									onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+									onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+									>
+										{forumAvatarUrl ? (
+											<img
+												src={forumAvatarUrl}
+												alt=""
+												style={{
+													width: '100%',
+													height: '100%',
+													objectFit: 'cover'
+												}}
+											/>
+										) : (
+											<div style={{
+												fontSize: 16,
+												color: 'var(--muted)',
+												fontWeight: 'bold'
+											}}>
+												{forumTitle.charAt(0).toUpperCase()}
+											</div>
+										)}
+									</div>
+								</Link>
 								<h3 style={{ margin: 0 }}>
 									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
 									{' > '}
@@ -606,17 +621,31 @@ export default function BoardPage() {
 							<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 								<div className="row" style={{ alignItems: 'center' }}>
 									<div className="row" style={{ alignItems: 'center', gap: 12 }}>
-																			<div style={{
-										width: 32,
-										height: 32,
-										borderRadius: 16,
-										backgroundColor: 'var(--border)',
-										display: 'flex',
-										alignItems: 'center',
-										justifyContent: 'center',
-										flexShrink: 0,
-										overflow: 'hidden'
-									}}>
+									<Link
+										to={`/forum/${forumId}`}
+										style={{
+											display: 'flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											flexShrink: 0,
+											textDecoration: 'none'
+										}}
+									>
+										<div style={{
+											width: 32,
+											height: 32,
+											borderRadius: 16,
+											backgroundColor: 'var(--border)',
+											display: 'flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											overflow: 'hidden',
+											cursor: 'pointer',
+											transition: 'transform 0.1s ease'
+										}}
+										onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+										onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+										>
 											{forumAvatarUrl ? (
 												<img
 													src={forumAvatarUrl}
@@ -637,14 +666,15 @@ export default function BoardPage() {
 												</div>
 											)}
 										</div>
-										<h3 style={{ margin: 0 }}>
-											<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
-											{' > '}
-											<Link to={`/forum/${forumId}/board/${boardId}`}>{boardTitle}</Link>
-											{' > '}
-											<span>{activeThread ? activeThread.title : 'Thread'}</span>
-										</h3>
-									</div>
+									</Link>
+									<h3 style={{ margin: 0 }}>
+										<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
+										{' > '}
+										<Link to={`/forum/${forumId}/board/${boardId}`}>{boardTitle}</Link>
+										{' > '}
+										<span>{activeThread ? activeThread.title : 'Thread'}</span>
+									</h3>
+								</div>
 									<div className="spacer" />
 								{(() => {
 									const totalPages = pageData?.pages ?? 1;

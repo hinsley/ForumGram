@@ -5,7 +5,8 @@ import { getInputPeerForForumId } from '@lib/telegram/peers';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash, getLastPostForBoard } from '@lib/protocol';
-import { sendPlainMessage, deleteMessages } from '@lib/telegram/client';
+import { sendPlainMessage, deleteMessages, downloadForumAvatar } from '@lib/telegram/client';
+import { getForumAvatarBlob, setForumAvatarBlob } from '@lib/db';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
@@ -17,9 +18,49 @@ export default function ForumPage() {
 	const initForums = useForumsStore((s) => s.initFromStorage);
 	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 	const [openMenuForBoardId, setOpenMenuForBoardId] = useState<string | null>(null);
+	const [forumAvatarUrl, setForumAvatarUrl] = useState<string | null>(null);
 	const { isSidebarCollapsed } = useUiStore();
 
 	useEffect(() => { initForums(); }, [initForums]);
+
+	// Load forum avatar
+	useEffect(() => {
+		const loadForumAvatar = async () => {
+			if (!Number.isFinite(forumId)) return;
+
+			try {
+				// Check if we already have this avatar cached
+				let cached = await getForumAvatarBlob(forumId);
+				if (cached) {
+					setForumAvatarUrl(URL.createObjectURL(cached));
+					return;
+				}
+
+				// Try to download the avatar from Telegram
+				const downloaded = await downloadForumAvatar(forumId);
+				if (downloaded) {
+					await setForumAvatarBlob(forumId, downloaded);
+					setForumAvatarUrl(URL.createObjectURL(downloaded));
+				} else {
+					setForumAvatarUrl(null);
+				}
+			} catch (e) {
+				console.error(`Failed to load avatar for forum ${forumId}:`, e);
+				setForumAvatarUrl(null);
+			}
+		};
+
+		loadForumAvatar();
+	}, [forumId]);
+
+	// Cleanup Object URL when component unmounts
+	useEffect(() => {
+		return () => {
+			if (forumAvatarUrl) {
+				URL.revokeObjectURL(forumAvatarUrl);
+			}
+		};
+	}, [forumAvatarUrl]);
 	const { data, isLoading, error, refetch } = useQuery({
 		queryKey: ['boards', forumId],
 		queryFn: async () => {
@@ -104,7 +145,42 @@ export default function ForumPage() {
 			<SidebarToggle />
 			<main className="main">
 				<div className="card" style={{ padding: 12 }}>
-					<h3>{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}</h3>
+					<div className="row" style={{ alignItems: 'center', gap: 12, marginBottom: 16 }}>
+						<div style={{
+							width: 48,
+							height: 48,
+							borderRadius: 24,
+							backgroundColor: 'var(--border)',
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'center',
+							flexShrink: 0,
+							overflow: 'hidden'
+						}}>
+							{forumAvatarUrl ? (
+								<img
+									src={forumAvatarUrl}
+									alt=""
+									style={{
+										width: '100%',
+										height: '100%',
+										objectFit: 'cover'
+									}}
+								/>
+							) : (
+								<div style={{
+									fontSize: 20,
+									color: 'var(--muted)',
+									fontWeight: 'bold'
+								}}>
+									{(forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)).charAt(0).toUpperCase()}
+								</div>
+							)}
+						</div>
+						<h3 style={{ margin: 0 }}>
+							{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}
+						</h3>
+					</div>
 					<div className="col">
 						<div className="row" style={{ alignItems: 'center' }}>
 							<h4 style={{ marginTop: 0, marginBottom: 0 }}>Boards</h4>
