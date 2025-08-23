@@ -4,6 +4,7 @@ import { StringSession } from 'telegram/sessions';
 import { TG_API_HASH, TG_API_ID } from './constants';
 import { getStoredSessionString } from '@state/session';
 import { computeCheck } from 'telegram/Password';
+import { useForumsStore } from '@state/forums';
 
 let cachedClient: TelegramClient | null = null;
 let connecting: Promise<TelegramClient> | null = null;
@@ -238,4 +239,56 @@ export async function joinPublicByUsername(usernameOrAt: string) {
 		// If already a participant or cannot join (e.g., joining own), proceed to return entity
 	}
 	return channel as any;
+}
+
+export async function downloadForumAvatar(forumId: number): Promise<Blob | null> {
+	const client = await getClient();
+	try {
+		// Get the forum entity to access its photo
+		const forumMeta = useForumsStore.getState().getForum(forumId);
+		if (!forumMeta) return null;
+
+		let chatEntity: any = null;
+
+		// Try to get the chat entity
+		if (forumMeta.accessHash) {
+			const inputPeer = new Api.InputPeerChannel({ channelId: forumId, accessHash: forumMeta.accessHash } as any);
+			try {
+				const chat = await client.getEntity(inputPeer as any);
+				chatEntity = chat;
+			} catch (e) {
+				// Fallback: try to resolve by username if available
+				if (forumMeta.username) {
+					try {
+						const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username: forumMeta.username }));
+						chatEntity = (res?.chats ?? []).find((c: any) =>
+							(c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel') &&
+							c.id === forumId
+						);
+					} catch {}
+				}
+			}
+		}
+
+		if (!chatEntity) return null;
+
+		// Check if the chat has a photo
+		const photo = chatEntity.photo;
+		if (!photo || (photo.className === 'ChatPhotoEmpty' || photo._ === 'chatPhotoEmpty')) {
+			return null;
+		}
+
+		// Download the profile photo
+		const data: any = await client.downloadProfilePhoto(chatEntity);
+		if (data instanceof Blob) {
+			return data;
+		} else if (data) {
+			return new Blob([data]);
+		}
+
+		return null;
+	} catch (e) {
+		console.error('Failed to download forum avatar:', e);
+		return null;
+	}
 }

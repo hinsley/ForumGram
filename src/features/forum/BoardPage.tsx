@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, searchThreadCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread, fetchPostPage } from '@lib/protocol';
-import { deleteMessages, sendPlainMessage, getClient, editMessage } from '@lib/telegram/client';
+import { deleteMessages, sendPlainMessage, getClient, editMessage, downloadForumAvatar } from '@lib/telegram/client';
 import MessageList from '@components/MessageList';
-import { getAvatarBlob, setAvatarBlob } from '@lib/db';
+import { getAvatarBlob, setAvatarBlob, getForumAvatarBlob, setForumAvatarBlob } from '@lib/db';
 import { useSessionStore } from '@state/session';
 import { Api } from 'telegram';
 import { useUiStore } from '@state/ui';
@@ -96,6 +96,78 @@ export default function BoardPage() {
 	const activeThreadId = selectedThreadId;
 	const activeThread = (threads || []).find((t) => t.id === activeThreadId) || null;
 	const [openMenuForThreadId, setOpenMenuForThreadId] = useState<string | null>(null);
+	const [forumAvatarUrl, setForumAvatarUrl] = useState<string | null>(null);
+	const currentAvatarUrlRef = useRef<string | null>(null);
+	const currentForumIdRef = useRef<number | null>(null);
+
+	// Load forum avatar with stable reference management
+	const loadForumAvatar = useCallback(async (targetForumId: number) => {
+		if (!Number.isFinite(targetForumId)) return;
+
+		// If we already have the avatar for this forum, don't reload
+		if (currentForumIdRef.current === targetForumId && currentAvatarUrlRef.current) {
+			if (!forumAvatarUrl) {
+				setForumAvatarUrl(currentAvatarUrlRef.current);
+			}
+			return;
+		}
+
+		// Clean up previous Object URL if changing forums
+		if (currentAvatarUrlRef.current && currentForumIdRef.current !== targetForumId) {
+			URL.revokeObjectURL(currentAvatarUrlRef.current);
+			currentAvatarUrlRef.current = null;
+		}
+
+		try {
+			// Check if we already have this avatar cached
+			let cached = await getForumAvatarBlob(targetForumId);
+			if (cached) {
+				const newUrl = URL.createObjectURL(cached);
+				currentAvatarUrlRef.current = newUrl;
+				currentForumIdRef.current = targetForumId;
+				setForumAvatarUrl(newUrl);
+				return;
+			}
+
+			// Try to download the avatar from Telegram
+			const downloaded = await downloadForumAvatar(targetForumId);
+			if (downloaded) {
+				await setForumAvatarBlob(targetForumId, downloaded);
+				const newUrl = URL.createObjectURL(downloaded);
+				currentAvatarUrlRef.current = newUrl;
+				currentForumIdRef.current = targetForumId;
+				setForumAvatarUrl(newUrl);
+			} else {
+				currentAvatarUrlRef.current = null;
+				currentForumIdRef.current = targetForumId;
+				setForumAvatarUrl(null);
+			}
+		} catch (e) {
+			console.error(`Failed to load avatar for forum ${targetForumId}:`, e);
+			currentAvatarUrlRef.current = null;
+			currentForumIdRef.current = targetForumId;
+			setForumAvatarUrl(null);
+		}
+	}, [forumAvatarUrl]);
+
+	// Load avatar when forumId changes
+	useEffect(() => {
+		loadForumAvatar(forumId);
+	}, [forumId, loadForumAvatar]);
+
+	// Cleanup Object URL when component unmounts
+	useEffect(() => {
+		return () => {
+			// Only cleanup if we're navigating away from this forum entirely
+			// This prevents cleanup during navigation within the same forum
+			setTimeout(() => {
+				if (currentAvatarUrlRef.current && currentForumIdRef.current !== forumId) {
+					URL.revokeObjectURL(currentAvatarUrlRef.current);
+					currentAvatarUrlRef.current = null;
+				}
+			}, 100);
+		};
+	}, [forumId]);
 
 	// Normalize current page, default to 1 and redirect to include page param if missing.
 	const currentPage = Math.max(1, Number.isFinite(Number(page)) ? Number(page) : 1);
@@ -445,11 +517,44 @@ export default function BoardPage() {
 				{!activeThreadId ? (
 					<div className="card" style={{ padding: 12 }}>
 						<div className="row" style={{ alignItems: 'center' }}>
-							<h3 style={{ margin: 0 }}>
-								<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
-								{' > '}
-								<span>{boardTitle}</span>
-							</h3>
+							<div className="row" style={{ alignItems: 'center', gap: 12 }}>
+								<div style={{
+									width: 32,
+									height: 32,
+									borderRadius: 16,
+									backgroundColor: 'var(--border)',
+									display: 'flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									flexShrink: 0,
+									overflow: 'hidden'
+								}}>
+									{forumAvatarUrl ? (
+										<img
+											src={forumAvatarUrl}
+											alt=""
+											style={{
+												width: '100%',
+												height: '100%',
+												objectFit: 'cover'
+											}}
+										/>
+									) : (
+										<div style={{
+											fontSize: 16,
+											color: 'var(--muted)',
+											fontWeight: 'bold'
+										}}>
+											{forumTitle.charAt(0).toUpperCase()}
+										</div>
+									)}
+								</div>
+								<h3 style={{ margin: 0 }}>
+									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
+									{' > '}
+									<span>{boardTitle}</span>
+								</h3>
+							</div>
 							<div className="spacer" />
 						</div>
 						<div className="row" style={{ alignItems: 'center', marginTop: 8 }}>
@@ -500,14 +605,47 @@ export default function BoardPage() {
 						<div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
 							<div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
 								<div className="row" style={{ alignItems: 'center' }}>
-								<h3 style={{ margin: 0 }}>
-									<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
-									{' > '}
-									<Link to={`/forum/${forumId}/board/${boardId}`}>{boardTitle}</Link>
-									{' > '}
-									<span>{activeThread ? activeThread.title : 'Thread'}</span>
-								</h3>
-								<div className="spacer" />
+									<div className="row" style={{ alignItems: 'center', gap: 12 }}>
+																			<div style={{
+										width: 32,
+										height: 32,
+										borderRadius: 16,
+										backgroundColor: 'var(--border)',
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										flexShrink: 0,
+										overflow: 'hidden'
+									}}>
+											{forumAvatarUrl ? (
+												<img
+													src={forumAvatarUrl}
+													alt=""
+													style={{
+														width: '100%',
+														height: '100%',
+														objectFit: 'cover'
+													}}
+												/>
+											) : (
+												<div style={{
+													fontSize: 16,
+													color: 'var(--muted)',
+													fontWeight: 'bold'
+												}}>
+													{forumTitle.charAt(0).toUpperCase()}
+												</div>
+											)}
+										</div>
+										<h3 style={{ margin: 0 }}>
+											<Link to={`/forum/${forumId}`}>{forumTitle}</Link>
+											{' > '}
+											<Link to={`/forum/${forumId}/board/${boardId}`}>{boardTitle}</Link>
+											{' > '}
+											<span>{activeThread ? activeThread.title : 'Thread'}</span>
+										</h3>
+									</div>
+									<div className="spacer" />
 								{(() => {
 									const totalPages = pageData?.pages ?? 1;
 									const onFirst = () => activeThreadId && navigate(`/forum/${forumId}/board/${boardId}/thread/${activeThreadId}/page/1`);

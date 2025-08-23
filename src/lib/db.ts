@@ -58,6 +58,19 @@ export async function setAvatarBlob(userId: number, blob: Blob): Promise<void> {
 	await db.avatars.put({ userId, blob, updatedAt: Date.now() });
 }
 
+export async function getForumAvatarBlob(forumId: number): Promise<Blob | null> {
+	// Use negative IDs to distinguish forum avatars from user avatars.
+	const avatarId = -Math.abs(forumId);
+	const row = await db.avatars.get(avatarId);
+	return row?.blob ?? null;
+}
+
+export async function setForumAvatarBlob(forumId: number, blob: Blob): Promise<void> {
+	// Use negative IDs to distinguish forum avatars from user avatars.
+	const avatarId = -Math.abs(forumId);
+	await db.avatars.put({ userId: avatarId, blob, updatedAt: Date.now() });
+}
+
 export async function getActivityCount(forumId: number, userId: number): Promise<number | null> {
 	const key = `act:${forumId}:${userId}`;
 	const v = await kvGet(key);
