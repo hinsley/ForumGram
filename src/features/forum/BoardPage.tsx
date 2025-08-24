@@ -70,7 +70,7 @@ export default function BoardPage() {
 			return items as ThreadMeta[];
 		},
 		enabled: Number.isFinite(forumId) && Boolean(boardId),
-		staleTime: 10_000,
+		staleTime: 300_000, // 5 minutes - disable automatic polling
 	});
 
 	const { data: lastPostByThreadId = {} } = useQuery<{ [threadId: string]: any }>({
@@ -84,7 +84,7 @@ export default function BoardPage() {
 			return Object.fromEntries(entries);
 		},
 		enabled: Number.isFinite(forumId) && Boolean(boardId) && (threads ?? []).length > 0,
-		staleTime: 5_000,
+		staleTime: 300_000, // 5 minutes - disable automatic polling
 	});
 
 
@@ -254,7 +254,7 @@ export default function BoardPage() {
 			return { items: mapped as any[], count, pages };
 		},
 		enabled: Number.isFinite(forumId) && Boolean(activeThreadId),
-		staleTime: 5_000,
+		staleTime: 300_000, // 5 minutes - disable automatic polling
 	});
 
 	async function onCreateThread() {

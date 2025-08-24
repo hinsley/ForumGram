@@ -83,7 +83,7 @@ export default function ForumPage() {
 			return Object.fromEntries(entries);
 		},
 		enabled: Number.isFinite(forumId) && (data ?? []).length > 0,
-		staleTime: 5_000,
+		staleTime: 300_000, // 5 minutes - disable automatic polling
 	});
 
 
