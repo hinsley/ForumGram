@@ -6,6 +6,7 @@ import { getInputPeerForForumId } from '@lib/telegram/peers';
 import { useQuery } from '@tanstack/react-query';
 import { ThreadMeta, searchThreadCards, composeThreadCard, composePostCard, generateIdHash, searchBoardCards, getLastPostForThread, fetchPostPage } from '@lib/protocol';
 import { deleteMessages, sendPlainMessage, getClient, editMessage, downloadForumAvatar } from '@lib/telegram/client';
+import { prepareUploadedInputMedia as tgPrepareUploadedInputMedia, prepareExistingInputMedia as tgPrepareExistingInputMedia } from '@lib/telegram/media';
 import MessageList from '@components/MessageList';
 import { getAvatarBlob, setAvatarBlob, getForumAvatarBlob, setForumAvatarBlob } from '@lib/db';
 import { useSessionStore } from '@state/session';
@@ -184,9 +185,13 @@ export default function BoardPage() {
 			if (!activeThreadId) return { items: [] as any[], count: 0, pages: 1 };
 			const input = getInputPeerForForumId(forumId);
 			const { items, count, pages } = await fetchPostPage(input, String(activeThreadId), currentPage, 10);
-			// Build author map and load avatars once per unique user.
-			const uniqueUserIds = Array.from(new Set(items.map((p) => p.fromUserId).filter(Boolean))) as number[];
+			// Media references are now handled directly by MarkdownView from text content.
 			const client = await getClient();
+			const enrichedItems = await Promise.all((items ?? []).map(async (p: any) => {
+				return p;
+			}));
+			// Build author map and load avatars once per unique user.
+			const uniqueUserIds = Array.from(new Set(enrichedItems.map((p: any) => p.fromUserId).filter(Boolean))) as number[];
 			const userIdToUrl: Record<number, string | undefined> = {};
 			for (const uid of uniqueUserIds) {
 				try {
@@ -218,35 +223,18 @@ export default function BoardPage() {
 					userIdToUrl[uid] = undefined;
 				}
 			}
-			const mapped = items.map((p) => ({
+			const mapped = enrichedItems.map((p: any) => ({
 				id: p.messageId,
 				from: p.fromUserId ? (p.user?.username ? '@' + p.user.username : [p.user?.firstName, p.user?.lastName].filter(Boolean).join(' ')) : 'unknown',
 				date: p.date ?? 0,
 				text: p.content,
 				threadId: p.parentThreadId,
 				avatarUrl: p.fromUserId ? userIdToUrl[p.fromUserId] : undefined,
-				attachments: (() => {
-					const med: any = (p as any).media;
-					if (med && (med.className === 'MessageMediaDocument' || med._ === 'messageMediaDocument')) {
-						const doc: any = med.document ?? {};
-						let name: string | undefined;
-						let mimeType: string | undefined = doc.mimeType ?? doc.mime_type;
-						let sizeBytes: number | undefined = typeof doc.size === 'number' ? doc.size : undefined;
-						if (Array.isArray(doc.attributes)) {
-							for (const attr of doc.attributes) {
-								if (attr.className === 'DocumentAttributeFilename' || attr._ === 'documentAttributeFilename') {
-									name = (attr.fileName ?? attr.file_name) as any;
-									break;
-								}
-							}
-						}
-						return [{ name: name ?? 'file', isMedia: false, media: med, mimeType, sizeBytes }];
-					}
-					return [];
-				})(),
+
 				groupedId: p.groupedId,
 				cardId: p.id,
 				authorUserId: p.fromUserId,
+				forumId: forumId as number,
 				canEdit: false,
 				canDelete: false,
 			}));
@@ -304,65 +292,50 @@ export default function BoardPage() {
 
 	const [composerText, setComposerText] = useState('');
 	type PreparedInputMedia = { inputMedia: any; name?: string; mimeType?: string };
-	type DraftAttachment = { id: string; file?: File; status: 'idle'|'uploading'|'uploaded'|'error'; prepared?: PreparedInputMedia; fromExisting?: boolean; name?: string; mimeType?: string };
+	type DraftAttachment = { id: string; file?: File; status: 'idle'|'uploading'|'uploaded'|'error'; prepared?: PreparedInputMedia; fromExisting?: boolean; name?: string; mimeType?: string; isInline?: boolean; placeholderId?: string };
 	const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
 	const [isEditing, setIsEditing] = useState(false);
 	const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
 	const [showPostSubmitted, setShowPostSubmitted] = useState(false);
 	const hidePostSubmittedTimerRef = useRef<number | undefined>(undefined);
 
-	async function prepareUploadedInputMedia(uploaded: any, file: File): Promise<PreparedInputMedia> {
-		// Always send uploads as files (documents).
-		const attributes: any[] = [new Api.DocumentAttributeFilename({ fileName: file.name })];
-		const media = new Api.InputMediaUploadedDocument({
-			file: uploaded,
-			mimeType: file.type || 'application/octet-stream',
-			attributes,
-			forceFile: true,
-		});
-		return { inputMedia: media, name: file.name, mimeType: file.type };
+	function isAllowedInlineMedia(file: File): boolean {
+		const type = (file.type || '').toLowerCase();
+		const name = (file.name || '').toLowerCase();
+		const ext = name.split('.').pop() || '';
+		if (type === 'image/webp' || ext === 'webp') return false;
+		if (type.startsWith('image/')) {
+			return type === 'image/jpeg' || type === 'image/png' || type === 'image/gif' || type === 'image/heic' || type === 'image/heif';
+		}
+		// Disallow videos and other types for inline media.
+		if (type.startsWith('video/')) return false;
+		return ['jpg','jpeg','png','gif','heic','heif'].includes(ext);
 	}
 
-	async function prepareExistingInputMedia(media: any): Promise<PreparedInputMedia | undefined> {
-		try {
-			if (!media) return undefined;
-			const mm: any = media;
-			if (mm.className === 'MessageMediaPhoto' || mm._ === 'messageMediaPhoto') {
-				const p: any = mm.photo ?? mm._photo ?? mm;
-				const id = p.id ?? p._id;
-				const accessHash = p.accessHash ?? p.access_hash;
-				const fileReference = p.fileReference ?? p.file_reference;
-				if (id && accessHash && fileReference) {
-					const inputPhoto = new Api.InputPhoto({ id, accessHash, fileReference });
-					return { inputMedia: new Api.InputMediaPhoto({ id: inputPhoto }) };
-				}
-			}
-			if (mm.className === 'MessageMediaDocument' || mm._ === 'messageMediaDocument') {
-				const d: any = mm.document ?? mm._document ?? mm;
-				const id = d.id ?? d._id;
-				const accessHash = d.accessHash ?? d.access_hash;
-				const fileReference = d.fileReference ?? d.file_reference;
-				if (id && accessHash && fileReference) {
-					const inputDoc = new Api.InputDocument({ id, accessHash, fileReference });
-					return { inputMedia: new Api.InputMediaDocument({ id: inputDoc }), mimeType: d.mimeType ?? d.mime_type };
-				}
-			}
-		} catch {}
-		return undefined;
+	function injectInlineMarkdownPlaceholders(attList: { placeholderId: string; name: string }[]) {
+		if (!attList.length) return;
+		let addition = '';
+		for (const a of attList) {
+			addition += `\n\n![${a.name}](tg-media:${a.placeholderId})`;
+		}
+		setComposerText((prev) => `${prev}${addition}`);
 	}
 
-	async function sendMediaMessage(input: any, caption: string, media: any) {
-		const client = await getClient();
-		const rid = BigInt(Date.now() * 1000 + Math.floor(Math.random() * 1000));
-		await client.invoke(new Api.messages.SendMedia({ peer: input, media, message: caption, randomId: rid as any }));
-	}
+	const prepareUploadedInputMedia = tgPrepareUploadedInputMedia as unknown as (uploaded: any, file: File) => Promise<PreparedInputMedia>;
+
+	const prepareExistingInputMedia = async (media: any): Promise<PreparedInputMedia | undefined> => {
+		const res = await tgPrepareExistingInputMedia(media);
+		return res ?? undefined;
+	};
+
+	// Use imported sendMediaMessage / sendMultiMediaMessage from client.
 
 	async function onSendPost() {
 		try {
 			if (!activeThreadId) return;
 			const input = getInputPeerForForumId(forumId);
 			if (isEditing && editingMessageId) {
-				// Edit in place for text only; attachments in edit mode are ignored.
+				// Edit in place for text only; media references are extracted from text content.
 				let cardIdToKeep = '';
 				try {
 					const client = await getClient();
@@ -393,14 +366,51 @@ export default function BoardPage() {
 				const idHash = generateIdHash(16);
 				const prepared = draftAttachments
 					.filter(a => a.prepared && a.status === 'uploaded')
-					.map(a => a.prepared!);
+					.map(a => ({ att: a, prepared: a.prepared! }));
+
 				if (prepared.length === 0) {
 					const text = composePostCard(idHash, activeThreadId, { content: composerText });
 					await sendPlainMessage(input, text);
-				} else if (prepared.length >= 1) {
-					// Only send the first attachment as a document.
-					const firstText = composePostCard(idHash, activeThreadId, { content: composerText });
-					await sendMediaMessage(input, firstText, prepared[0]!.inputMedia);
+				} else {
+					const inlineOrder: string[] = [];
+					try {
+						const rx = /\!\[[^\]]*\]\(tg-media:([A-Za-z0-9_-]+)\)/g;
+						let m: RegExpExecArray | null;
+						while ((m = rx.exec(composerText)) !== null) inlineOrder.push(m[1]);
+					} catch {}
+					const inlinePrepared = prepared.filter(p => p.att.isInline && p.att.placeholderId && inlineOrder.includes(p.att.placeholderId));
+					inlinePrepared.sort((a, b) => inlineOrder.indexOf(a.att.placeholderId!) - inlineOrder.indexOf(b.att.placeholderId!));
+					const nonInlinePrepared = prepared.filter(p => !p.att.isInline || !p.att.placeholderId || !inlineOrder.includes(p.att.placeholderId));
+					const finalPrepared = [...inlinePrepared, ...nonInlinePrepared];
+
+					// Send each media as a separate message without caption; collect message IDs.
+					const client = await getClient();
+					const sentIds: number[] = [];
+					for (const fp of finalPrepared) {
+						try {
+							const res: any = await client.invoke(new Api.messages.SendMedia({ peer: input, media: fp.prepared.inputMedia, message: '' } as any));
+							const mid = Number((res?.updates ?? []).map((u: any) => u.message?.id || u?.id).find((v: any) => Number.isFinite(Number(v))));
+							if (Number.isFinite(mid)) sentIds.push(Number(mid));
+						} catch {}
+					}
+
+					// Map placeholder IDs to actual message IDs
+					const placeholderToMessageId = new Map<string, number>();
+					finalPrepared.forEach((p, idx) => {
+						if (p.att.placeholderId && sentIds[idx]) {
+							placeholderToMessageId.set(p.att.placeholderId, sentIds[idx]);
+						}
+					});
+
+					// Replace placeholders with actual message IDs
+					let replacedContent = composerText;
+					replacedContent = replacedContent.replace(/(\!\[[^\]]*\]\(tg-media:)([A-Za-z0-9_-]+)(\))/g, (full, a, pid, c) => {
+						const messageId = placeholderToMessageId.get(pid);
+						return messageId ? `${a}${messageId}${c}` : full;
+					});
+
+					const text = composePostCard(idHash, activeThreadId, { content: replacedContent });
+					await sendPlainMessage(input, text);
 				}
 				try { if (hidePostSubmittedTimerRef.current) { clearTimeout(hidePostSubmittedTimerRef.current); } } catch {}
 				setShowPostSubmitted(true);
@@ -445,18 +455,62 @@ export default function BoardPage() {
 		input.click();
 	}
 
+	function triggerMediaPick() {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = 'image/jpeg,image/png,image/gif,image/heic,image/heif';
+		input.multiple = true;
+		input.onchange = async () => {
+			const files = Array.from(input.files || []).filter(isAllowedInlineMedia);
+			if (!files.length) return;
+			const client = await getClient();
+			const toAdd: DraftAttachment[] = [];
+			const placeholders: { placeholderId: string; name: string }[] = [];
+			for (const file of files) {
+				const id = generateIdHash(8);
+				const placeholderId = generateIdHash(8);
+				toAdd.push({ id, file, status: 'uploading', name: file.name, mimeType: file.type, isInline: true, placeholderId });
+				placeholders.push({ placeholderId, name: file.name || 'media' });
+			}
+			setDraftAttachments(prev => [...prev, ...toAdd]);
+			injectInlineMarkdownPlaceholders(placeholders);
+			for (const att of toAdd) {
+				try {
+					// @ts-ignore
+					const uploaded = await (client as any).uploadFile({ file: att.file!, workers: 1 });
+					const prepared = await prepareUploadedInputMedia(uploaded, att.file!);
+					setDraftAttachments(prev => prev.map(x => x.id === att.id ? { ...x, status: 'uploaded', prepared } : x));
+				} catch {
+					setDraftAttachments(prev => prev.map(x => x.id === att.id ? { ...x, status: 'error' } : x));
+				}
+			}
+		};
+		input.click();
+	}
+
 	async function onEditPost(msg: any) {
 		try {
 			setIsEditing(true);
 			setEditingMessageId(msg.id);
 			setComposerText(msg.text);
-			// Build existing attachments for reuse when composing a new post later.
+			// Extract media IDs from text for reuse when composing a new post later.
 			let existing: DraftAttachment | null = null;
-			if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+			const mediaIds: number[] = [];
+			const rx = /tg-media:(\d+)/g;
+			let match;
+			while ((match = rx.exec(msg.text)) !== null) {
+				mediaIds.push(Number(match[1]));
+			}
+			if (mediaIds.length > 0) {
 				try {
-					const att = msg.attachments[0];
-					const prep = await prepareExistingInputMedia(att.media);
-					if (prep) existing = { id: generateIdHash(8), status: 'uploaded', prepared: prep, fromExisting: true, name: att.name, mimeType: att.mimeType };
+					const editClient = await getClient();
+					const msgs: any = await editClient.invoke(new Api.messages.GetMessages({ id: mediaIds.map((n) => new Api.InputMessageID({ id: n })) } as any));
+					const list: any[] = (msgs?.messages ?? []).filter((mm: any) => mm && (mm.className === 'Message' || mm._ === 'message'));
+					if (list.length > 0) {
+						const mediaMsg = list[0];
+						const prep = await prepareExistingInputMedia(mediaMsg.media);
+						if (prep) existing = { id: generateIdHash(8), status: 'uploaded', prepared: prep, fromExisting: true, name: 'media', mimeType: 'image/jpeg' };
+					}
 				} catch {}
 			}
 			setDraftAttachments(existing ? [existing] : []);
@@ -467,6 +521,11 @@ export default function BoardPage() {
 
 	function removeDraftAttachment(id: string) {
 		setDraftAttachments(prev => prev.filter(a => a.id !== id));
+		const att = draftAttachments.find(a => a.id === id);
+		if (att?.isInline && att.placeholderId) {
+			const rx = new RegExp(`\\!\\[[^\\]]*\\]\\(tg-media:${att.placeholderId}\\)`, 'g');
+			setComposerText(prev => prev.replace(rx, ''));
+		}
 	}
 
 	function cancelEditing() {
@@ -707,9 +766,46 @@ export default function BoardPage() {
 								<button className="btn" title="Attach files" onClick={() => triggerFilePick()}>
 									📎
 								</button>
+								<button className="btn" title="Attach media inline" onClick={() => triggerMediaPick()}>
+									🖼️
+								</button>
 							</div>
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-								<textarea className="textarea" value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder={isEditing ? 'Edit your post...' : 'Write a post...'} />
+								<textarea
+									className="textarea"
+									value={composerText}
+									onChange={(e) => setComposerText(e.target.value)}
+									placeholder={isEditing ? 'Edit your post...' : 'Write a post...'}
+									onDragOver={(e) => { try { e.preventDefault(); } catch {} }}
+									onDrop={async (e) => {
+										e.preventDefault();
+										try {
+											const files = Array.from(e.dataTransfer?.files || []).filter(isAllowedInlineMedia);
+											if (!files.length) return;
+											const client = await getClient();
+											const toAdd: DraftAttachment[] = [];
+											const placeholders: { placeholderId: string; name: string }[] = [];
+											for (const file of files) {
+												const id = generateIdHash(8);
+												const placeholderId = generateIdHash(8);
+												toAdd.push({ id, file, status: 'uploading', name: file.name, mimeType: file.type, isInline: true, placeholderId });
+												placeholders.push({ placeholderId, name: file.name || 'media' });
+											}
+											setDraftAttachments(prev => [...prev, ...toAdd]);
+											injectInlineMarkdownPlaceholders(placeholders);
+											for (const att of toAdd) {
+												try {
+													// @ts-ignore
+													const uploaded = await (client as any).uploadFile({ file: att.file!, workers: 1 });
+													const prepared = await prepareUploadedInputMedia(uploaded, att.file!);
+													setDraftAttachments(prev => prev.map(x => x.id === att.id ? { ...x, status: 'uploaded', prepared } : x));
+												} catch {
+													setDraftAttachments(prev => prev.map(x => x.id === att.id ? { ...x, status: 'error' } : x));
+												}
+											}
+										} catch {}
+									}}
+								/>
 								{draftAttachments.length > 0 && (
 									<div style={{ padding: 8, background: '#0b1529', border: '1px solid var(--border)', borderRadius: 8 }}>
 										<div style={{ display: 'grid', gap: 6 }}>
@@ -717,7 +813,7 @@ export default function BoardPage() {
 												<div key={att.id} className="row" style={{ alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
 													<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 														<div style={{ width: 8, height: 8, borderRadius: 4, background: att.status === 'uploaded' ? 'var(--success)' : att.status === 'uploading' ? 'var(--muted)' : att.status === 'error' ? 'var(--danger)' : 'var(--muted)' }} />
-														<div>{att.name || 'attachment'}</div>
+														<div>{att.name || 'attachment'}{att.isInline ? ' (inline)' : ''}</div>
 														<div style={{ color: 'var(--muted)', fontSize: 12 }}>
 															{att.status === 'uploading' ? 'Uploading…' : att.status === 'uploaded' ? 'Ready' : att.status === 'error' ? 'Failed' : ''}
 														</div>

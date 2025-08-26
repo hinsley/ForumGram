@@ -1,15 +1,8 @@
 import MarkdownView from '@lib/markdown';
 import { format } from 'date-fns';
-import { getClient } from '@lib/telegram/client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-interface AttachmentMeta {
-	name: string;
-	sizeBytes?: number;
-	mimeType?: string;
-	isMedia: boolean;
-	media: any;
-}
+
 
 export interface DisplayMessage {
 	id: number;
@@ -19,11 +12,11 @@ export interface DisplayMessage {
 	threadId?: string | null;
 	avatarUrl?: string;
 	activityCount?: number;
-	attachments?: AttachmentMeta[];
 	canEdit?: boolean;
 	canDelete?: boolean;
     cardId?: string;
     authorUserId?: number;
+	forumId?: number;
 }
         
 export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete }: { msg: DisplayMessage; canEdit?: boolean; canDelete?: boolean; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void; }) {
@@ -32,79 +25,11 @@ export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete 
 	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
 	const postedAt = `${datePart} at ${timePart}`;
 
-	function formatBytes(size?: number): string {
-		if (!size || size <= 0) return '';
-		const units = ['B', 'KB', 'MB', 'GB'];
-		let idx = 0;
-		let val = size;
-		while (val >= 1024 && idx < units.length - 1) {
-			val = val / 1024;
-			idx++;
-		}
-		const num = idx === 0 ? Math.round(val) : Math.round(val * 10) / 10;
-		return `${num} ${units[idx]}`;
-	}
 
-	const [thumbUrls, setThumbUrls] = useState<(string | undefined)[]>([]);
+
 	const [menuOpen, setMenuOpen] = useState(false);
-	useEffect(() => {
-		let canceled = false;
-		const cleanups: Array<() => void> = [];
-		(async () => {
-			try {
-				if (!Array.isArray(msg.attachments) || msg.attachments.length === 0) {
-					setThumbUrls([]);
-					return;
-				}
-				const client = await getClient();
-				const urls: (string | undefined)[] = [];
-				for (let i = 0; i < msg.attachments.length; i++) {
-					const att = msg.attachments[i];
-					if (att && att.isMedia && (att.mimeType?.startsWith('image/') || att.mimeType?.startsWith('video/'))) {
-						try {
-							const sizes = (att as any)?.media?.photo?.sizes || (att as any)?.media?.document?.thumbs;
-							if (!Array.isArray(sizes) || sizes.length === 0) { urls[i] = undefined; continue; }
-							const largestIdx = sizes.length - 1;
-							const thumbParam = largestIdx; // use index for largest thumb
-							const data: any = await (client as any).downloadMedia(att.media, { thumb: thumbParam });
-							if (!data) { urls[i] = undefined; continue; }
-							const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' });
-							const url = URL.createObjectURL(blob);
-							urls[i] = url;
-							cleanups.push(() => URL.revokeObjectURL(url));
-						} catch {}
-					} else {
-						urls[i] = undefined;
-					}
-				}
-				if (!canceled) setThumbUrls(urls);
-			} catch {}
-		})();
-		return () => {
-			canceled = true;
-			for (const fn of cleanups) { try { fn(); } catch {} }
-		};
-	}, [msg.attachments]);
 
-	async function onAttachmentClick(att: AttachmentMeta) {
-		try {
-			const client = await getClient();
-			const data: any = await (client as any).downloadMedia(att.media);
-			const blob = data instanceof Blob ? data : new Blob([data], { type: att.mimeType || 'application/octet-stream' });
-			const url = URL.createObjectURL(blob);
-			if (att.isMedia) {
-				window.open(url, '_blank');
-			} else {
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = att.name || 'download';
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				setTimeout(() => URL.revokeObjectURL(url), 4000);
-			}
-		} catch {}
-	}
+
 
 	return (
 		<div className="forum-post">
@@ -142,24 +67,7 @@ export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete 
 				<div className="post-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
 					<div>Posted {postedAt}</div>
 				</div>
-	            <div className="post-content"><MarkdownView text={msg.text} /></div>
-	            {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
-	                <div className="post-attachments" style={{ marginTop: 8 }}>
-	                    <div className="list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-	                        {msg.attachments.map((att, idx) => (
-	                            <div key={idx} className="list-item" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => onAttachmentClick(att)}>
-	                                {thumbUrls[idx] && (
-	                                    <img src={thumbUrls[idx]} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} />
-	                                )}
-	                                <div>
-	                                    <div className="title">{att.name}</div>
-	                                    <div className="sub">{formatBytes(att.sizeBytes)}</div>
-	                                </div>
-	                            </div>
-	                        ))}
-	                    </div>
-	                </div>
-	            )}
+	            <div className="post-content"><MarkdownView text={msg.text} forumId={msg.forumId} debugId={msg.id} /></div>
 			</div>
 		</div>
 	);

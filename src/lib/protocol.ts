@@ -365,7 +365,7 @@ export async function fetchPostPage(
     (res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
     const messages: any[] = (res.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
     const items: PostCard[] = [];
-    for (const m of messages) {
+    	for (const m of messages) {
         const parsed = parsePostCard(m.message ?? '');
         if (!parsed) continue;
         if (parsed.parentThreadId !== parentThreadId) continue;
@@ -377,4 +377,3 @@ export async function fetchPostPage(
     items.sort((a, b) => (a.date ?? 0) - (b.date ?? 0));
     return { items, count, pages: totalPages };
 }
-
