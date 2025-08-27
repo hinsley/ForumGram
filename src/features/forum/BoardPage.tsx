@@ -347,7 +347,51 @@ export default function BoardPage() {
 				} catch {
 					cardIdToKeep = generateIdHash(16);
 				}
-				const newText = composePostCard(cardIdToKeep, activeThreadId, { content: composerText });
+				// If there are newly uploaded attachments, send them now, replace placeholders, then edit text.
+				const prepared = draftAttachments
+					.filter(a => a.prepared && a.status === 'uploaded')
+					.map(a => ({ att: a, prepared: a.prepared! }));
+
+				let finalContent = composerText;
+				if (prepared.length > 0) {
+					const inlineOrder: string[] = [];
+					try {
+						const rx = /\!\[[^\]]*\]\(tg-media:([A-Za-z0-9_-]+)\)/g;
+						let m: RegExpExecArray | null;
+						while ((m = rx.exec(composerText)) !== null) inlineOrder.push(m[1]);
+					} catch {}
+					const inlinePrepared = prepared.filter(p => p.att.isInline && p.att.placeholderId && inlineOrder.includes(p.att.placeholderId));
+					inlinePrepared.sort((a, b) => inlineOrder.indexOf(a.att.placeholderId!) - inlineOrder.indexOf(b.att.placeholderId!));
+					const nonInlinePrepared = prepared.filter(p => !p.att.isInline || !p.att.placeholderId || !inlineOrder.includes(p.att.placeholderId));
+					const finalPrepared = [...inlinePrepared, ...nonInlinePrepared];
+
+					// Send each media as a separate message without caption; collect message IDs.
+					const client = await getClient();
+					const sentIds: number[] = [];
+					for (const fp of finalPrepared) {
+						try {
+							const res: any = await client.invoke(new Api.messages.SendMedia({ peer: input, media: fp.prepared.inputMedia, message: '' } as any));
+							const mid = Number((res?.updates ?? []).map((u: any) => u.message?.id || u?.id).find((v: any) => Number.isFinite(Number(v))));
+							if (Number.isFinite(mid)) sentIds.push(Number(mid));
+						} catch {}
+					}
+
+					// Map placeholder IDs to actual message IDs
+					const placeholderToMessageId = new Map<string, number>();
+					finalPrepared.forEach((p, idx) => {
+						if (p.att.placeholderId && sentIds[idx]) {
+							placeholderToMessageId.set(p.att.placeholderId, sentIds[idx]);
+						}
+					});
+
+					// Replace placeholders with actual message IDs
+					finalContent = finalContent.replace(/(\!\[[^\]]*\]\(tg-media:)([A-Za-z0-9_-]+)(\))/g, (full, a, pid, c) => {
+						const messageId = placeholderToMessageId.get(pid);
+						return messageId ? `${a}${messageId}${c}` : full;
+					});
+				}
+
+				const newText = composePostCard(cardIdToKeep, activeThreadId, { content: finalContent });
 				try {
 					await editMessage(input, editingMessageId, newText);
 					try { window.location.reload(); } catch {}
