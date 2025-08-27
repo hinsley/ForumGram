@@ -127,7 +127,7 @@ export default function MarkdownView({ text, className, forumId, debugId }: Mark
 								await writable.write(blob);
 								await writable.close();
 								file = await fileHandle.getFile();
-								const url = URL.createObjectURL(file);
+								const url = file ? URL.createObjectURL(file) : '';
 								idToUrlGlobal.set(mid, url);
 								out.push({ url, mime, messageId: mid });
 							} else {
