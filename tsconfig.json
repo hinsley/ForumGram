@@ -21,6 +21,7 @@
       "@app/*": ["src/app/*"],
       "@components/*": ["src/components/*"],
       "@features/*": ["src/features/*"],
+      "@lib/protocol": ["src/lib/protocol-pagination.ts"],
       "@lib/*": ["src/lib/*"],
       "@state/*": ["src/state/*"],
       "@workers/*": ["src/workers/*"],
