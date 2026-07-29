@@ -1,8 +1,7 @@
 import { Api } from 'telegram';
 import { getClient } from '@lib/telegram/client';
-import { parsePostCard, type PostCard } from './protocol';
-
-export * from './protocol';
+import { postCardFromTelegramMessage } from './protocol/search';
+import type { PostCard } from './protocol/types';
 
 const TELEGRAM_PAGE_LIMIT = 100;
 const MAX_FRESH_HISTORY_PAGES = 30;
@@ -23,23 +22,6 @@ export type PostPageWindow = {
 	freshEnd: number;
 };
 
-function toPostCard(message: any, parentThreadId: string, usersMap: Record<string, any>): PostCard | null {
-	const parsed = parsePostCard(message?.message ?? '');
-	if (!parsed || parsed.parentThreadId !== parentThreadId) return null;
-	const fromUserId: number | undefined = message.fromId?.userId ? Number(message.fromId.userId) : undefined;
-	return {
-		id: parsed.id,
-		parentThreadId,
-		messageId: Number(message.id),
-		fromUserId,
-		user: fromUserId ? usersMap[String(fromUserId)] : undefined,
-		date: Number(message.date),
-		content: parsed.data.content,
-		media: message.media,
-		groupedId: message.groupedId ? String(message.groupedId) : undefined,
-	};
-}
-
 function normalizeNonNegativeInteger(value: number): number {
 	return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
@@ -49,10 +31,7 @@ function normalizePageSize(value: number): number {
 	return Math.min(TELEGRAM_PAGE_LIMIT, Math.max(1, Math.trunc(value)));
 }
 
-/**
- * Translate oldest-first page coordinates into Telegram's newest-first search offset,
- * while reserving the newest slots for posts that exist in history but are not indexed yet.
- */
+/** Translate oldest-first page coordinates into Telegram's newest-first search offset. */
 export function getPostPageWindow(
 	indexedCountValue: number,
 	freshCountValue: number,
@@ -74,16 +53,17 @@ export function getPostPageWindow(
 	const indexedAddOffset = Math.max(0, indexedCount - indexedEnd);
 	const freshStart = Math.max(0, pageStart - indexedCount);
 	const freshEnd = Math.max(freshStart, pageEnd - indexedCount);
-
 	return { count, page, pageSize, pages, indexedAddOffset, indexedLimit, freshStart, freshEnd };
 }
 
 /**
- * Telegram search can lag behind chat history for newly sent messages. Build a stable snapshot
- * by counting indexed results and adding exact ForumGram post cards seen in recent history but
- * absent from the newest indexed search window.
+ * Build a stable snapshot by combining indexed cards with exact supported cards that are visible
+ * in recent history but have not reached Telegram search yet.
  */
-async function getPostPaginationSnapshot(input: Api.TypeInputPeer, parentThreadId: string): Promise<PostPaginationSnapshot> {
+async function getPostPaginationSnapshot(
+	input: Api.TypeInputPeer,
+	parentThreadId: string,
+): Promise<PostPaginationSnapshot> {
 	const client = await getClient();
 	const q = `fg.post ${parentThreadId}`;
 	const searchRes: any = await client.invoke(new Api.messages.Search({
@@ -95,28 +75,26 @@ async function getPostPaginationSnapshot(input: Api.TypeInputPeer, parentThreadI
 		filter: new Api.InputMessagesFilterEmpty(),
 	} as any));
 
-	const indexedCount = normalizeNonNegativeInteger(
+	const reportedIndexedCount = normalizeNonNegativeInteger(
 		typeof searchRes?.count === 'number'
 			? searchRes.count
 			: (Array.isArray(searchRes?.messages) ? searchRes.messages.length : 0),
 	);
 	const indexedUsers: Record<string, any> = {};
-	(searchRes.users ?? []).forEach((u: any) => { indexedUsers[String(u.id)] = u; });
+	(searchRes.users ?? []).forEach((user: any) => { indexedUsers[String(user.id)] = user; });
 	const recentIndexedIds = new Set<number>();
-	for (const message of (searchRes.messages ?? [])) {
-		const post = toPostCard(message, parentThreadId, indexedUsers);
-		if (post) recentIndexedIds.add(post.messageId);
+	let rejectedRecentResults = 0;
+	const recentMessages: any[] = searchRes.messages ?? [];
+	for (const message of recentMessages) {
+		const post = postCardFromTelegramMessage(message, indexedUsers);
+		if (post && post.parentThreadId === parentThreadId) recentIndexedIds.add(post.messageId);
+		else rejectedRecentResults++;
 	}
 
-	// If the search count is nonzero but no result parses as this thread, do not infer which
-	// history entries are unindexed. The exact ForumGram parser remains the source of truth.
-	if (indexedCount > 0 && recentIndexedIds.size === 0) {
-		return { indexedCount, freshPosts: [] };
-	}
-
-	const oldestRecentIndexedId = recentIndexedIds.size > 0
-		? Math.min(...recentIndexedIds)
-		: 0;
+	// Search count includes matching text that is not a supported ForumGram card. Remove every
+	// rejected result visible in the indexed window, including explicitly unsupported versions.
+	const indexedCount = Math.max(0, reportedIndexedCount - rejectedRecentResults);
+	const oldestRecentIndexedId = recentIndexedIds.size > 0 ? Math.min(...recentIndexedIds) : 0;
 	const freshByMessageId = new Map<number, PostCard>();
 	const historyUsers: Record<string, any> = {};
 	let offsetId = 0;
@@ -130,8 +108,10 @@ async function getPostPaginationSnapshot(input: Api.TypeInputPeer, parentThreadI
 			addOffset: 0,
 			limit: TELEGRAM_PAGE_LIMIT,
 		} as any));
-		(historyRes.users ?? []).forEach((u: any) => { historyUsers[String(u.id)] = u; });
-		const batch: any[] = (historyRes.messages ?? []).filter((m: any) => m.className === 'Message' || m._ === 'message');
+		(historyRes.users ?? []).forEach((user: any) => { historyUsers[String(user.id)] = user; });
+		const batch: any[] = (historyRes.messages ?? []).filter(
+			(message: any) => message?.className === 'Message' || message?._ === 'message',
+		);
 		if (!batch.length) break;
 
 		for (const message of batch) {
@@ -141,8 +121,8 @@ async function getPostPaginationSnapshot(input: Api.TypeInputPeer, parentThreadI
 				break;
 			}
 			if (recentIndexedIds.has(messageId)) continue;
-			const post = toPostCard(message, parentThreadId, historyUsers);
-			if (post) freshByMessageId.set(messageId, post);
+			const post = postCardFromTelegramMessage(message, historyUsers);
+			if (post && post.parentThreadId === parentThreadId) freshByMessageId.set(messageId, post);
 		}
 
 		const nextOffsetId = Number(batch[batch.length - 1].id);
@@ -158,16 +138,11 @@ async function getPostPaginationSnapshot(input: Api.TypeInputPeer, parentThreadI
 	return { indexedCount, freshPosts };
 }
 
-/** Count indexed and newly sent, not-yet-indexed ForumGram posts in a thread. */
 export async function countPostsInThread(input: Api.TypeInputPeer, parentThreadId: string): Promise<number> {
 	const snapshot = await getPostPaginationSnapshot(input, parentThreadId);
 	return snapshot.indexedCount + snapshot.freshPosts.length;
 }
 
-/**
- * Fetch a specific oldest-first page. Indexed posts come from messages.search; newly sent
- * unindexed posts are appended from recent history so the last page updates immediately.
- */
 export async function fetchPostPage(
 	input: Api.TypeInputPeer,
 	parentThreadId: string,
@@ -190,10 +165,10 @@ export async function fetchPostPage(
 			filter: new Api.InputMessagesFilterEmpty(),
 		} as any));
 		const usersMap: Record<string, any> = {};
-		(res.users ?? []).forEach((u: any) => { usersMap[String(u.id)] = u; });
+		(res.users ?? []).forEach((user: any) => { usersMap[String(user.id)] = user; });
 		for (const message of (res.messages ?? [])) {
-			const post = toPostCard(message, parentThreadId, usersMap);
-			if (post) itemsByMessageId.set(post.messageId, post);
+			const post = postCardFromTelegramMessage(message, usersMap);
+			if (post && post.parentThreadId === parentThreadId) itemsByMessageId.set(post.messageId, post);
 		}
 	}
 
