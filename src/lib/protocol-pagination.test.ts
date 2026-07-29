@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPostPageWindow } from './protocol-pagination';
+import { getPostPageWindow } from './protocol';
 
 describe('ForumGram post pagination', () => {
 	it('maps oldest-first pages onto Telegram newest-first offsets', () => {
