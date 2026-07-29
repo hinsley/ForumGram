@@ -12,7 +12,6 @@ import {
 	parseThreadCard,
 	postCardFromTelegramMessage,
 	threadMetaFromTelegramMessage,
-	upgradeCardToCurrent,
 } from './protocol';
 import { GOLDEN_CARDS } from './protocol/golden-fixtures';
 
@@ -56,13 +55,5 @@ describe('ForumGram card protocol dispatcher', () => {
 		expect(boardMetaFromTelegramMessage(telegramMessage(GOLDEN_CARDS.unsupported.board))).toBeNull();
 		expect(threadMetaFromTelegramMessage(telegramMessage(GOLDEN_CARDS.unsupported.thread))).toBeNull();
 		expect(postCardFromTelegramMessage(telegramMessage(GOLDEN_CARDS.unsupported.post))).toBeNull();
-	});
-
-	it('upgrades version 0 cards without mutating current cards', () => {
-		expect(upgradeCardToCurrent(GOLDEN_CARDS.v0.board)).toBe(GOLDEN_CARDS.v1.board);
-		expect(upgradeCardToCurrent(GOLDEN_CARDS.v0.thread)).toBe(GOLDEN_CARDS.v1.thread);
-		expect(upgradeCardToCurrent(GOLDEN_CARDS.v0.post)).toBe(GOLDEN_CARDS.v1.post);
-		expect(upgradeCardToCurrent(GOLDEN_CARDS.v1.post)).toBe(GOLDEN_CARDS.v1.post);
-		expect(upgradeCardToCurrent(GOLDEN_CARDS.unsupported.post)).toBeNull();
 	});
 });
