@@ -64,19 +64,3 @@ export function parsePostCard(text: string): ParsedPostCard | null {
 export function getCardProtocolVersion(text: string): ProtocolVersion | null {
 	return parseCard(text)?.version ?? null;
 }
-
-/** Return a version 1 representation without writing it back to Telegram. */
-export function upgradeCardToCurrent(text: string): string | null {
-	const parsed = parseCard(text);
-	if (!parsed) return null;
-	if (parsed.version === CURRENT_PROTOCOL_VERSION) return text;
-
-	switch (parsed.kind) {
-		case 'board':
-			return composeBoardCard(parsed.id, parsed.data);
-		case 'thread':
-			return composeThreadCard(parsed.id, parsed.parentBoardId, parsed.data);
-		case 'post':
-			return composePostCard(parsed.id, parsed.parentThreadId, parsed.data);
-	}
-}
