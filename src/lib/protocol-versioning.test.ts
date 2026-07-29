@@ -1,50 +1,68 @@
 import { describe, expect, it } from 'vitest';
-import { parsePostCard as parseLegacyPostCard } from './protocol';
 import {
 	CURRENT_PROTOCOL_VERSION,
 	LEGACY_PROTOCOL_VERSION,
+	boardMetaFromTelegramMessage,
 	composeBoardCard,
 	composePostCard,
 	composeThreadCard,
 	parseBoardCard,
+	parseCard,
 	parsePostCard,
 	parseThreadCard,
-} from './protocol-versioned';
+	postCardFromTelegramMessage,
+	threadMetaFromTelegramMessage,
+	upgradeCardToCurrent,
+} from './protocol';
+import { GOLDEN_CARDS } from './protocol/golden-fixtures';
 
-describe('ForumGram card protocol versioning', () => {
-	it('writes version 1 into every new card payload', () => {
-		const boardPayload = JSON.parse(composeBoardCard('board-id', { title: 'Board' }).split('\n').slice(2).join('\n'));
-		const threadPayload = JSON.parse(composeThreadCard('thread-id', 'board-id', { title: 'Thread' }).split('\n').slice(3).join('\n'));
-		const postPayload = JSON.parse(composePostCard('post-id', 'thread-id', { content: 'Post' }).split('\n').slice(3).join('\n'));
+function telegramMessage(message: string, id: number = 1): any {
+	return { className: 'Message', id, date: 1, message, fromId: { userId: 7 } };
+}
 
-		expect(boardPayload.version).toBe(CURRENT_PROTOCOL_VERSION);
-		expect(threadPayload.version).toBe(CURRENT_PROTOCOL_VERSION);
-		expect(postPayload.version).toBe(CURRENT_PROTOCOL_VERSION);
+describe('ForumGram card protocol dispatcher', () => {
+	it('emits the fixed version 1 wire format', () => {
+		expect(composeBoardCard('board-id', { title: 'Board', description: 'Description' }))
+			.toBe(GOLDEN_CARDS.v1.board);
+		expect(composeThreadCard('thread-id', 'board-id', { title: 'Thread' }))
+			.toBe(GOLDEN_CARDS.v1.thread);
+		expect(composePostCard('post-id', 'thread-id', { content: 'Post' }))
+			.toBe(GOLDEN_CARDS.v1.post);
 	});
 
-	it('reports new cards as version 1', () => {
-		expect(parseBoardCard(composeBoardCard('board-id', { title: 'Board' }))?.version).toBe(CURRENT_PROTOCOL_VERSION);
-		expect(parseThreadCard(composeThreadCard('thread-id', 'board-id', { title: 'Thread' }))?.version).toBe(CURRENT_PROTOCOL_VERSION);
-		expect(parsePostCard(composePostCard('post-id', 'thread-id', { content: 'Post' }))?.version).toBe(CURRENT_PROTOCOL_VERSION);
+	it('dispatches version 0 and version 1 cards to normalized results', () => {
+		expect(parseBoardCard(GOLDEN_CARDS.v0.board)).toMatchObject({
+			kind: 'board', version: LEGACY_PROTOCOL_VERSION, id: 'board-id',
+		});
+		expect(parseThreadCard(GOLDEN_CARDS.v0.thread)).toMatchObject({
+			kind: 'thread', version: LEGACY_PROTOCOL_VERSION, parentBoardId: 'board-id',
+		});
+		expect(parsePostCard(GOLDEN_CARDS.v0.post)).toMatchObject({
+			kind: 'post', version: LEGACY_PROTOCOL_VERSION, parentThreadId: 'thread-id',
+		});
+		expect(parseCard(GOLDEN_CARDS.v1.board)?.version).toBe(CURRENT_PROTOCOL_VERSION);
+		expect(parseCard(GOLDEN_CARDS.v1.thread)?.version).toBe(CURRENT_PROTOCOL_VERSION);
+		expect(parseCard(GOLDEN_CARDS.v1.post)?.version).toBe(CURRENT_PROTOCOL_VERSION);
 	});
 
-	it('continues to read unlabeled cards as version 0', () => {
-		const boardV0 = 'fg.metadata.board\nboard-id\n{"title":"Board","description":""}';
-		const threadV0 = 'fg.metadata.thread\nthread-id\nparent:board-id\n{"title":"Thread"}';
-		const postV0 = 'fg.post\npost-id\nparent:thread-id\n{"content":"Post"}';
-
-		expect(parseBoardCard(boardV0)?.version).toBe(LEGACY_PROTOCOL_VERSION);
-		expect(parseThreadCard(threadV0)?.version).toBe(LEGACY_PROTOCOL_VERSION);
-		expect(parsePostCard(postV0)?.version).toBe(LEGACY_PROTOCOL_VERSION);
+	it('rejects unsupported explicit versions through every card parser', () => {
+		expect(parseBoardCard(GOLDEN_CARDS.unsupported.board)).toBeNull();
+		expect(parseThreadCard(GOLDEN_CARDS.unsupported.thread)).toBeNull();
+		expect(parsePostCard(GOLDEN_CARDS.unsupported.post)).toBeNull();
+		expect(parseCard(GOLDEN_CARDS.unsupported.post)).toBeNull();
 	});
 
-	it('keeps version 1 post payloads readable by the version 0 parser', () => {
-		const card = composePostCard('post-id', 'thread-id', { content: '```ts\nconst x = 1;\n```' });
-		expect(parseLegacyPostCard(card)?.data.content).toBe('```ts\nconst x = 1;\n```');
+	it('rejects unsupported versions in Telegram search and pagination conversion paths', () => {
+		expect(boardMetaFromTelegramMessage(telegramMessage(GOLDEN_CARDS.unsupported.board))).toBeNull();
+		expect(threadMetaFromTelegramMessage(telegramMessage(GOLDEN_CARDS.unsupported.thread))).toBeNull();
+		expect(postCardFromTelegramMessage(telegramMessage(GOLDEN_CARDS.unsupported.post))).toBeNull();
 	});
 
-	it('rejects explicitly unsupported protocol versions', () => {
-		const unsupported = 'fg.post\npost-id\nparent:thread-id\n{"version":2,"content":"Post"}';
-		expect(parsePostCard(unsupported)).toBeNull();
+	it('upgrades version 0 cards without mutating current cards', () => {
+		expect(upgradeCardToCurrent(GOLDEN_CARDS.v0.board)).toBe(GOLDEN_CARDS.v1.board);
+		expect(upgradeCardToCurrent(GOLDEN_CARDS.v0.thread)).toBe(GOLDEN_CARDS.v1.thread);
+		expect(upgradeCardToCurrent(GOLDEN_CARDS.v0.post)).toBe(GOLDEN_CARDS.v1.post);
+		expect(upgradeCardToCurrent(GOLDEN_CARDS.v1.post)).toBe(GOLDEN_CARDS.v1.post);
+		expect(upgradeCardToCurrent(GOLDEN_CARDS.unsupported.post)).toBeNull();
 	});
 });
