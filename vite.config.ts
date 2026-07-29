@@ -55,7 +55,6 @@ export default defineConfig({
 			'@app': r('./src/app'),
 			'@components': r('./src/components'),
 			'@features': r('./src/features'),
-			'@lib/protocol': r('./src/lib/protocol-versioned.ts'),
 			'@lib': r('./src/lib'),
 			'@state': r('./src/state'),
 			'@workers': r('./src/workers'),
