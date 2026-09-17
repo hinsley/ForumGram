@@ -65,7 +65,7 @@ function MarkdownView({ text, className, forumId }: MarkdownViewProps) {
 		},
 	}), [forumId, imageMaxWidthPx]);
 	// No media child mounts, parsing, entity reads or downloads in plain-text mode.
-	if (!markdownEnabled) return <div className={`md ${className ?? ''}`}><div className="code-block"><div className="code-lang">text</div><pre><code>{text}</code></pre></div></div>;
+	if (!markdownEnabled) return <div className={`md ${className ?? ''}`} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</div>;
 	return <div className={`md ${className ?? ''}`}><ReactMarkdown rehypePlugins={katexEnabled ? mathPlugins : basePlugins} remarkPlugins={remarkPlugins} components={components} urlTransform={urlTransform}>{text}</ReactMarkdown></div>;
 }
 export default memo(MarkdownView);

@@ -14,6 +14,8 @@ interface SettingsState {
 }
 
 const THEME_STORAGE_KEY = 'settings_theme';
+const MARKDOWN_STORAGE_KEY = 'settings_markdown';
+const KATEX_STORAGE_KEY = 'settings_katex';
 const DEFAULT_THEME: SettingsState['theme'] = 'forumgram-blue';
 
 function loadInitialTheme(): SettingsState['theme'] {
@@ -24,14 +26,27 @@ function loadInitialTheme(): SettingsState['theme'] {
 	return DEFAULT_THEME;
 }
 
+function loadInitialBoolean(key: string, fallback: boolean): boolean {
+	try {
+		const raw = localStorage.getItem(key);
+		if (raw === '1') return true;
+		if (raw === '0') return false;
+	} catch {}
+	return fallback;
+}
+
+function persistBoolean(key: string, value: boolean) {
+	try { localStorage.setItem(key, value ? '1' : '0'); } catch {}
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
-	markdownEnabled: true,
-	katexEnabled: true,
+	markdownEnabled: loadInitialBoolean(MARKDOWN_STORAGE_KEY, true),
+	katexEnabled: loadInitialBoolean(KATEX_STORAGE_KEY, true),
 	forumSecret: null,
 	theme: loadInitialTheme(),
 	imageMaxWidthPx: 480,
-	setMarkdown: (on) => set({ markdownEnabled: on }),
-	setKatex: (on) => set({ katexEnabled: on }),
+	setMarkdown: (on) => { persistBoolean(MARKDOWN_STORAGE_KEY, on); set({ markdownEnabled: on }); },
+	setKatex: (on) => { persistBoolean(KATEX_STORAGE_KEY, on); set({ katexEnabled: on }); },
 	setForumSecret: (secret) => set({ forumSecret: secret }),
 	setImageMaxWidthPx: (px) => set({ imageMaxWidthPx: Math.max(100, Math.min(4000, Math.round(px))) }),
 	setTheme: (theme) => {
