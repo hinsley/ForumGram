@@ -1,294 +1,226 @@
-import { TelegramClient } from 'telegram';
-import { Api } from 'telegram';
+import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
-import { TG_API_HASH, TG_API_ID } from './constants';
-import { getStoredSessionString } from '@state/session';
 import { computeCheck } from 'telegram/Password';
-import { useForumsStore } from '@state/forums';
+import { generateRandomLong } from 'telegram/Helpers';
+import { TG_API_HASH, TG_API_ID } from './constants';
+import { abortError, assertAccountGeneration, assertAccountScope, captureAccountScope, getAccountGeneration, invalidateAccount, onAuthInvalidate, waitForAccountDisposal } from '@lib/accountScope';
+import type { AccountScope } from '@lib/accountScope';
+import { publishVerifiedAccount } from '@state/session';
 
-let cachedClient: TelegramClient | null = null;
-let connecting: Promise<TelegramClient> | null = null;
+interface ClientOwner {
+	client: TelegramClient;
+	generation: number;
+	connected: Promise<void>;
+	verified: boolean;
+}
+let owner: ClientOwner | null = null;
 
-async function createClient(sessionStr: string | null): Promise<TelegramClient> {
-	const session = new StringSession(sessionStr ?? '');
-	const client = new TelegramClient(session, TG_API_ID, TG_API_HASH, { connectionRetries: 5 });
-	await client.connect();
-	return client;
+async function disconnect(client: TelegramClient): Promise<void> {
+	try { await client.disconnect(); } catch { /* Local invalidation already completed. */ }
 }
 
-export async function getClient(): Promise<TelegramClient> {
-	if (cachedClient) return cachedClient;
-	if (connecting) return connecting;
-	const session = getStoredSessionString();
-	connecting = createClient(session)
-		.then((c) => {
-			cachedClient = c;
-			connecting = null;
-			return c;
-		})
-		.catch((e) => {
-			connecting = null;
-			throw e;
-		});
-	return connecting;
-}
-
-export async function sendCode(phone: string): Promise<{ phoneCodeHash: string }>
-{
-	const client = await getClient();
-	const res: any = await client.invoke(new Api.auth.SendCode({
-		phoneNumber: phone,
-		apiId: TG_API_ID,
-		apiHash: TG_API_HASH,
-		settings: new Api.CodeSettings({})
-	}));
-	const phoneCodeHash = (res as any).phoneCodeHash ?? (res as any).phone_code_hash ?? '';
-	return { phoneCodeHash };
-}
-
-export async function signIn(phone: string, code: string, phoneCodeHash: string, password?: string) {
-	const client = await getClient();
-	try {
-		const signed = await client.invoke(new Api.auth.SignIn({
-			phoneNumber: phone,
-			phoneCode: code,
-			phoneCodeHash,
-		}));
-		return signed;
-	} catch (e: any) {
-		if (e.errorMessage === 'SESSION_PASSWORD_NEEDED' && password) {
-			const pwd = await client.invoke(new Api.account.GetPassword());
-			const passwordSrp = await computeCheck(pwd as any, password);
-			const auth = await client.invoke(new Api.auth.CheckPassword({ password: passwordSrp }));
-			return auth;
+onAuthInvalidate((remoteLogout) => {
+	const old = owner;
+	owner = null;
+	if (!old) return;
+	// Never acquire/connect a client to log out. Bound network cleanup separately
+	// from the local account-disposal barrier so offline logout is immediate.
+	void (async () => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			if (remoteLogout && old.verified && old.client.connected) {
+				await Promise.race([
+					old.client.invoke(new Api.auth.LogOut()).catch(() => {}),
+					new Promise<void>((resolve) => { timer = setTimeout(resolve, 1500); }),
+				]);
+			}
+		} finally {
+			if (timer !== undefined) clearTimeout(timer);
+			await disconnect(old.client);
 		}
-		throw e;
-	}
+	})();
+});
+
+function assertOwner(candidate: ClientOwner): void {
+	assertAccountGeneration(candidate.generation);
+	if (owner !== candidate) throw abortError();
 }
 
-export async function logOut() {
-	const client = await getClient();
-	try { await client.invoke(new Api.auth.LogOut()); } catch {}
-	try { await client.disconnect(); } catch {}
-	cachedClient = null;
-}
-
-export async function getMe() {
-	const client = await getClient();
-	const me = await client.getMe();
-	return me as any;
-}
-
-export async function resolveForum(handleOrInvite: string) {
-	const client = await getClient();
-	if (handleOrInvite.startsWith('@')) {
-		const username = handleOrInvite.slice(1);
-		const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
-		return res;
-	}
-	if (handleOrInvite.includes('t.me') || handleOrInvite.includes('telegram.me')) {
-		// Support: https://t.me/+HASH, https://t.me/joinchat/HASH, https://t.me/username
-		try {
-			const url = new URL(handleOrInvite);
-			const segments = url.pathname.split('/').filter(Boolean);
-			const last = segments[segments.length - 1] ?? '';
-			const second = segments[segments.length - 2] ?? '';
-			if (second === 'joinchat' && last) {
-				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last }));
-				return invite;
-			}
-			if (last.startsWith('+')) {
-				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last.slice(1) }));
-				return invite;
-			}
-			const username = last;
-			const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
-			return res;
-		} catch {
-			const parts = handleOrInvite.split('/').filter(Boolean);
-			const last = parts[parts.length - 1] ?? '';
-			const second = parts[parts.length - 2] ?? '';
-			if (second === 'joinchat' && last) {
-				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last }));
-				return invite;
-			}
-			if (last.startsWith('+')) {
-				const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash: last.slice(1) }));
-				return invite;
-			}
-			const username = last;
-			const res = await client.invoke(new Api.contacts.ResolveUsername({ username }));
-			return res;
+async function createOwnedClient(session: string, generation: number): Promise<ClientOwner> {
+	await waitForAccountDisposal(generation);
+	assertAccountGeneration(generation);
+	if (owner) throw new Error('An authentication attempt is already active.');
+	const client = new TelegramClient(new StringSession(session), TG_API_ID, TG_API_HASH, { connectionRetries: 2 });
+	const candidate: ClientOwner = { client, generation, connected: Promise.resolve(), verified: false };
+	owner = candidate;
+	candidate.connected = (async () => {
+		try { await client.connect(); assertOwner(candidate); }
+		catch (error) {
+			if (owner === candidate) owner = null;
+			await disconnect(client);
+			throw error;
 		}
-	}
-	throw new Error('Unsupported forum identifier');
+	})();
+	await candidate.connected;
+	assertOwner(candidate);
+	return candidate;
 }
 
-// Deprecated topic-specific helpers removed (ForumGram does not use Telegram Topics)
-
-// Generic helpers for non-topic group chats
-export async function sendPlainMessage(input: Api.TypeInputPeer, message: string, entities?: any[]) {
-	const client = await getClient();
-	const res = await client.sendMessage(input as any, ({ message, entities } as any));
-	return res;
-}
-
-export async function deleteMessages(input: Api.TypeInputPeer, messageIds: number[]) {
-	const client = await getClient();
-	await (client as any).deleteMessages(input as any, messageIds, { revoke: true });
-}
-
-export async function editMessage(input: Api.TypeInputPeer, messageId: number, message: string, entities?: any[]) {
-	const client = await getClient();
-	const res = await client.invoke(new Api.messages.EditMessage({ peer: input, id: messageId, message, entities } as any));
-	return res;
-}
-
-export async function sendMediaMessage(
-	input: Api.TypeInputPeer,
-	message: string,
-	media: Api.TypeInputMedia,
-	entities?: any[],
-) {
-	const client = await getClient();
-	const res = await client.invoke(new Api.messages.SendMedia({
-		peer: input,
-		media,
-		message,
-		entities,
-	} as any));
-	return res as any;
-}
-
-export async function sendMultiMediaMessage(
-	input: Api.TypeInputPeer,
-	message: string,
-	media: Api.TypeInputMedia[],
-	entities?: any[],
-) {
-	const client = await getClient();
-	const now = Date.now();
-	const multi: any[] = media.map((m, idx) => new Api.InputSingleMedia({ media: m, randomId: BigInt(now + idx), message: '', entities: [] } as any));
-	// Attach caption to the first item; others must still have a string per TL schema
-	if (multi.length > 0) {
-		(multi[0] as any).message = message ?? '';
-		(multi[0] as any).entities = entities ?? [];
-	}
-	const res = await client.invoke(new Api.messages.SendMultiMedia({
-		peer: input,
-		multiMedia: multi,
-	} as any));
-	return res as any;
-}
-
-// Deprecated topic-specific media helpers removed
-
-function extractInviteHash(input: string): string | null {
-	if (input.startsWith('@')) return null;
-	if (input.includes('t.me') || input.includes('telegram.me')) {
-		try {
-			const url = new URL(input);
-			const segments = url.pathname.split('/').filter(Boolean);
-			const last = segments[segments.length - 1] ?? '';
-			const second = segments[segments.length - 2] ?? '';
-			if (second === 'joinchat' && last) return last;
-			if (last.startsWith('+')) return last.slice(1);
-			return null;
-		} catch {}
-		const parts = input.split('/').filter(Boolean);
-		const last = parts[parts.length - 1] ?? '';
-		const second = parts[parts.length - 2] ?? '';
-		if (second === 'joinchat' && last) return last;
-		if (last.startsWith('+')) return last.slice(1);
-		return null;
-	}
-	if (/^[A-Za-z0-9_-]{16,}$/.test(input)) return input;
-	return null;
-}
-
-export async function joinInviteLink(linkOrHash: string) {
-	const client = await getClient();
-	const hash = extractInviteHash(linkOrHash) ?? linkOrHash;
-	if (!hash) throw new Error('Invalid invite link');
+async function verifyAndPublish(candidate: ClientOwner): Promise<void> {
+	assertOwner(candidate);
+	const me = await candidate.client.getMe();
+	assertOwner(candidate);
+	const id = Number(me?.id);
+	if (!me || !Number.isSafeInteger(id) || id <= 0 || !(me instanceof Api.User)) throw new Error('Telegram did not return a valid account identity.');
+	candidate.verified = true;
 	try {
-		const updates = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-		return updates as any;
-	} catch (e: any) {
-		// If user is already a participant, fall back to a preview to obtain the chat entity
-		try {
-			const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
-			const chat: any = (invite as any)?.chat;
-			if (chat) {
-				return { chats: [chat] } as any;
-			}
-		} catch {}
-		throw e;
+		const session = candidate.client.session;
+		if (!(session instanceof StringSession)) throw new Error('Unexpected Telegram session type.');
+		await publishVerifiedAccount({ id, firstName: me.firstName, lastName: me.lastName, username: me.username }, session.save(), candidate.generation);
+		assertOwner(candidate);
+	} catch (error) {
+		if (owner === candidate) { owner = null; candidate.verified = false; }
+		await disconnect(candidate.client);
+		throw error;
 	}
 }
 
-export async function joinPublicByUsername(usernameOrAt: string) {
-	const client = await getClient();
-	const username = usernameOrAt.startsWith('@') ? usernameOrAt.slice(1) : usernameOrAt;
-	const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username }));
-	const channel = (res?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
+export async function restoreSession(session: string, generation: number): Promise<void> {
+	const candidate = await createOwnedClient(session, generation);
+	try { await verifyAndPublish(candidate); }
+	catch (error) {
+		if (owner === candidate) owner = null;
+		await disconnect(candidate.client);
+		throw error;
+	}
+}
+
+export async function getClient(scope = captureAccountScope()): Promise<TelegramClient> {
+	assertAccountScope(scope);
+	const candidate = owner;
+	if (!candidate?.verified || candidate.generation !== scope.generation) throw abortError();
+	await candidate.connected;
+	assertAccountScope(scope);
+	assertOwner(candidate);
+	return candidate.client;
+}
+
+export async function sendCode(phone: string): Promise<{ phoneCodeHash: string; generation: number }> {
+	// Every new code request starts with an empty StringSession, never a prior
+	// account's cached authorized client (including a failed saved bootstrap).
+	void invalidateAccount();
+	const generation = getAccountGeneration();
+	const candidate = await createOwnedClient('', generation);
+	assertOwner(candidate);
+	const result = await candidate.client.invoke(new Api.auth.SendCode({ phoneNumber: phone, apiId: TG_API_ID, apiHash: TG_API_HASH, settings: new Api.CodeSettings({}) }));
+	assertOwner(candidate);
+	if (!('phoneCodeHash' in result) || !result.phoneCodeHash) throw new Error('Telegram did not return a sign-in code token.');
+	return { phoneCodeHash: result.phoneCodeHash, generation };
+}
+
+export async function signIn(phone: string, code: string, phoneCodeHash: string, password: string | undefined, generation: number): Promise<void> {
+	const candidate = owner;
+	assertAccountGeneration(generation);
+	if (!candidate || candidate.generation !== generation || candidate.verified) throw abortError();
+	assertOwner(candidate);
+	try {
+		if (password) {
+			const parameters = await candidate.client.invoke(new Api.account.GetPassword());
+			assertOwner(candidate);
+			const passwordSrp = await computeCheck(parameters, password);
+			assertOwner(candidate);
+			await candidate.client.invoke(new Api.auth.CheckPassword({ password: passwordSrp }));
+		} else {
+			await candidate.client.invoke(new Api.auth.SignIn({ phoneNumber: phone, phoneCode: code, phoneCodeHash }));
+		}
+		assertOwner(candidate);
+		await verifyAndPublish(candidate);
+	} catch (error) { assertOwner(candidate); throw error; }
+}
+
+export async function sendPlainMessage(input: Api.TypeInputPeer, message: string, entities?: Api.TypeMessageEntity[], scope = captureAccountScope()) {
+	const client = await getClient(scope);
+	assertAccountScope(scope);
+	const result = await client.sendMessage(input, { message, formattingEntities: entities });
+	assertAccountScope(scope);
+	return result;
+}
+
+export async function deleteMessages(input: Api.TypeInputPeer, messageIds: number[], scope = captureAccountScope()) {
+	const client = await getClient(scope);
+	assertAccountScope(scope);
+	await client.deleteMessages(input, messageIds, { revoke: true });
+	assertAccountScope(scope);
+}
+
+export async function editMessage(input: Api.TypeInputPeer, messageId: number, message: string, entities?: Api.TypeMessageEntity[], scope = captureAccountScope()) {
+	const client = await getClient(scope);
+	assertAccountScope(scope);
+	const result = await client.invoke(new Api.messages.EditMessage({ peer: input, id: messageId, message, entities }));
+	assertAccountScope(scope);
+	return result;
+}
+
+export async function sendMediaMessage(input: Api.TypeInputPeer, message: string, media: Api.TypeInputMedia, entities?: Api.TypeMessageEntity[], scope = captureAccountScope()) {
+	const client = await getClient(scope);
+	assertAccountScope(scope);
+	const result = await client.invoke(new Api.messages.SendMedia({ peer: input, media, message, entities }));
+	assertAccountScope(scope);
+	return result;
+}
+
+export async function sendMultiMediaMessage(input: Api.TypeInputPeer, message: string, media: Api.TypeInputMedia[], entities?: Api.TypeMessageEntity[], scope = captureAccountScope()) {
+	const client = await getClient(scope);
+	const multiMedia = media.map((item, index) => new Api.InputSingleMedia({ media: item, randomId: generateRandomLong(), message: index === 0 ? message : '', entities: index === 0 ? entities : [] }));
+	assertAccountScope(scope);
+	const result = await client.invoke(new Api.messages.SendMultiMedia({ peer: input, multiMedia }));
+	assertAccountScope(scope);
+	return result;
+}
+
+function extractInviteHash(input: string): string {
+	const trimmed = input.trim();
+	if (/^[A-Za-z0-9_-]+$/.test(trimmed)) return trimmed;
+	const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+	if (!['t.me', 'telegram.me', 'www.t.me', 'www.telegram.me'].includes(url.hostname)) throw new Error('Invalid Telegram invite link');
+	const segments = url.pathname.split('/').filter(Boolean);
+	const hash = segments[0] === 'joinchat' ? segments[1] : segments[0]?.startsWith('+') ? segments[0].slice(1) : '';
+	if (!hash || !/^[A-Za-z0-9_-]+$/.test(hash)) throw new Error('Invalid Telegram invite link');
+	return hash;
+}
+
+export async function joinInviteLink(linkOrHash: string, scope: AccountScope = captureAccountScope()) {
+	const hash = extractInviteHash(linkOrHash);
+	const client = await getClient(scope);
+	assertAccountScope(scope);
+	try {
+		const result = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+		assertAccountScope(scope);
+		return result;
+	} catch (error) {
+		assertAccountScope(scope);
+		if (!error || typeof error !== 'object' || !('errorMessage' in error) || error.errorMessage !== 'USER_ALREADY_PARTICIPANT') throw error;
+		const invite = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+		assertAccountScope(scope);
+		if (!(invite instanceof Api.ChatInviteAlready)) throw error;
+		return { chats: [invite.chat] };
+	}
+}
+
+export async function joinPublicByUsername(usernameOrAt: string, scope: AccountScope = captureAccountScope()) {
+	const client = await getClient(scope);
+	assertAccountScope(scope);
+	const result = await client.invoke(new Api.contacts.ResolveUsername({ username: usernameOrAt.replace(/^@/, '') }));
+	assertAccountScope(scope);
+	const channel = result.chats.find((chat): chat is Api.Channel => chat instanceof Api.Channel);
 	if (!channel) throw new Error('No public forum found for this handle');
 	try {
-		const inputChannel = new Api.InputChannel({ channelId: channel.id, accessHash: channel.accessHash } as any);
-		await client.invoke(new Api.channels.JoinChannel({ channel: inputChannel } as any));
-	} catch (e: any) {
-		// If already a participant or cannot join (e.g., joining own), proceed to return entity
+		assertAccountScope(scope);
+		await client.invoke(new Api.channels.JoinChannel({ channel: new Api.InputChannel({ channelId: channel.id, accessHash: channel.accessHash! }) }));
+	} catch (error) {
+		assertAccountScope(scope);
+		if (!error || typeof error !== 'object' || !('errorMessage' in error) || error.errorMessage !== 'USER_ALREADY_PARTICIPANT') throw error;
 	}
-	return channel as any;
-}
-
-export async function downloadForumAvatar(forumId: number): Promise<Blob | null> {
-	const client = await getClient();
-	try {
-		// Get the forum entity to access its photo
-		const forumMeta = useForumsStore.getState().getForum(forumId);
-		if (!forumMeta) return null;
-
-		let chatEntity: any = null;
-
-		// Try to get the chat entity
-		if (forumMeta.accessHash) {
-			const inputPeer = new Api.InputPeerChannel({ channelId: forumId, accessHash: forumMeta.accessHash } as any);
-			try {
-				const chat = await client.getEntity(inputPeer as any);
-				chatEntity = chat;
-			} catch (e) {
-				// Fallback: try to resolve by username if available
-				if (forumMeta.username) {
-					try {
-						const res: any = await client.invoke(new Api.contacts.ResolveUsername({ username: forumMeta.username }));
-						chatEntity = (res?.chats ?? []).find((c: any) =>
-							(c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel') &&
-							c.id === forumId
-						);
-					} catch {}
-				}
-			}
-		}
-
-		if (!chatEntity) return null;
-
-		// Check if the chat has a photo
-		const photo = chatEntity.photo;
-		if (!photo || (photo.className === 'ChatPhotoEmpty' || photo._ === 'chatPhotoEmpty')) {
-			return null;
-		}
-
-		// Download the profile photo
-		const data: any = await client.downloadProfilePhoto(chatEntity);
-		if (data instanceof Blob) {
-			return data;
-		} else if (data) {
-			return new Blob([data]);
-		}
-
-		return null;
-	} catch (e) {
-		console.error('Failed to download forum avatar:', e);
-		return null;
-	}
+	assertAccountScope(scope);
+	return channel;
 }

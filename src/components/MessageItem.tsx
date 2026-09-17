@@ -1,6 +1,9 @@
 import MarkdownView from '@lib/markdown';
 import { format } from 'date-fns';
-import { useState } from 'react';
+import { memo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { accountQueryKey, captureAccountScope } from '@lib/accountScope';
+import { getUserAvatar, useBlobUrl } from '@lib/resourceCache';
 
 
 
@@ -10,7 +13,7 @@ export interface DisplayMessage {
 	date: number; // epoch seconds
 	text: string;
 	threadId?: string | null;
-	avatarUrl?: string;
+	groupedId?: string;
 	activityCount?: number;
 	canEdit?: boolean;
 	canDelete?: boolean;
@@ -19,7 +22,7 @@ export interface DisplayMessage {
 	forumId?: number;
 }
         
-export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete }: { msg: DisplayMessage; canEdit?: boolean; canDelete?: boolean; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void; }) {
+const MessageItem = memo(function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete }: { msg: DisplayMessage; canEdit?: boolean; canDelete?: boolean; onEdit?: (msg: DisplayMessage) => void; onDelete?: (msg: DisplayMessage) => void; }) {
 	const dateObj = new Date(msg.date * 1000);
 	const datePart = format(dateObj, 'd MMMM yyyy');
 	const timePart = format(dateObj, 'h:mm a').replace(' ', '').toLowerCase();
@@ -34,11 +37,7 @@ export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete 
 	return (
 		<div className="forum-post">
 			<div className="post-author">
-				{msg.avatarUrl ? (
-					<img className="avatar" src={msg.avatarUrl} alt="avatar" />
-				) : (
-					<div className="avatar placeholder" />
-				)}
+				<AuthorAvatar userId={msg.authorUserId} />
 				<div className="author-name">{msg.from ?? 'unknown'}</div>
 				{typeof msg.activityCount === 'number' && (
 					<div className="author-activity">Activity: {msg.activityCount}</div>
@@ -71,4 +70,19 @@ export default function MessageItem({ msg, canEdit, canDelete, onEdit, onDelete 
 			</div>
 		</div>
 	);
+});
+
+function AuthorAvatar({ userId }: { userId?: number }) {
+	const scope = captureAccountScope();
+	const avatar = useQuery({
+		queryKey: accountQueryKey(scope, 'user-avatar', userId),
+		queryFn: () => getUserAvatar(userId!, scope),
+		enabled: userId !== undefined,
+		staleTime: 60_000,
+		gcTime: 300_000,
+	});
+	const url = useBlobUrl(avatar.data);
+	return url ? <img className="avatar" src={url} alt="avatar" /> : <div className="avatar placeholder" />;
 }
+
+export default MessageItem;

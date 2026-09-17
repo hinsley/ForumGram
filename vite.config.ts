@@ -37,16 +37,10 @@ export default defineConfig({
 				navigateFallback: '/index.html',
 				maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
 				globPatterns: ['**/*.{js,css,html,woff2,woff,ttf,svg,png,jpg,jpeg}'],
-				runtimeCaching: [
-					{
-						urlPattern: ({ request }) => request.destination === 'image',
-						handler: 'CacheFirst',
-						options: {
-							cacheName: 'images',
-							expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-						},
-					},
-				],
+				// Precache the app shell/route chunks for offline navigation. Private
+				// media is owned exclusively by the account-aware resource cache.
+				importScripts: ['legacy-cache-cleanup.js'],
+				runtimeCaching: [],
 			},
 		}),
 	],

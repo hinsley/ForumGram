@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	CURRENT_PROTOCOL_VERSION,
 	LEGACY_PROTOCOL_VERSION,
-	boardMetaFromTelegramMessage,
 	composeBoardCard,
 	composePostCard,
 	composeThreadCard,
@@ -10,9 +9,8 @@ import {
 	parseCard,
 	parsePostCard,
 	parseThreadCard,
-	postCardFromTelegramMessage,
-	threadMetaFromTelegramMessage,
 } from './protocol';
+import { boardMetaFromTelegramMessage, postCardFromTelegramMessage, threadMetaFromTelegramMessage } from './protocol/search';
 import { GOLDEN_CARDS } from './protocol/golden-fixtures';
 
 function telegramMessage(message: string, id: number = 1): any {

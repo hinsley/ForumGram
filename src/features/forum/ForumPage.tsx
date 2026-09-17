@@ -1,142 +1,91 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
 import ForumList from '@components/ForumList';
 import { useForumsStore } from '@state/forums';
-import { searchBoardCards, BoardMeta, composeBoardCard, generateIdHash, getLastPostForBoard } from '@lib/protocol';
-import { sendPlainMessage, deleteMessages, downloadForumAvatar } from '@lib/telegram/client';
-import { getForumAvatarBlob, setForumAvatarBlob } from '@lib/db';
+import { BoardMeta, composeBoardCard, generateIdHash, compareCards } from '@lib/protocol';
+import { CURRENT_PROTOCOL_VERSION } from '@lib/protocol/types';
+import { sendPlainMessage, deleteMessages, editMessage } from '@lib/telegram/client';
+import { getForumAvatar, useBlobUrl } from '@lib/resourceCache';
+import { accountQueryKey, assertAccountScope, captureAccountScope, type AccountScope } from '@lib/accountScope';
+import { boardsQueryOptions, threadsQueryOptions, threadActivityQueryOptions, loadMoreBoards, invalidateForumQueries, recordBoardChange, reserveMetadataChange } from '@lib/forumQueries';
 import { useUiStore } from '@state/ui';
 import SidebarToggle from '@components/SidebarToggle';
 import { formatTimeSince } from '@lib/time';
 
+function CachedBoardActivity({ scope, forumId, boardId }: { scope: AccountScope; forumId: number; boardId: string }) {
+	const { data } = useQuery({ ...threadsQueryOptions(scope, forumId, boardId), enabled: false });
+	const summaries = useQueries({ queries: (data?.items ?? []).map((thread) => ({ ...threadActivityQueryOptions(scope, forumId, thread.id), enabled: false })) });
+	const latest = summaries.flatMap((summary) => summary.data ? [summary.data] : []).sort((a, b) => compareCards(b, a))[0];
+	return latest ? <div className="sub">Recent activity {formatTimeSince(latest.date)}</div> : null;
+}
+
 export default function ForumPage() {
 	const { id } = useParams();
 	const forumId = Number(id);
-	const navigate = useNavigate();
-	const initForums = useForumsStore((s) => s.initFromStorage);
+	const scope = captureAccountScope();
 	const forumMeta = useForumsStore((s) => (Number.isFinite(forumId) ? s.forums[forumId] : undefined));
 	const [openMenuForBoardId, setOpenMenuForBoardId] = useState<string | null>(null);
-	const [forumAvatarUrl, setForumAvatarUrl] = useState<string | null>(null);
 	const { isSidebarCollapsed } = useUiStore();
 
-	useEffect(() => { initForums(); }, [initForums]);
-
-	// Load forum avatar
-	useEffect(() => {
-		const loadForumAvatar = async () => {
-			if (!Number.isFinite(forumId)) return;
-
-			try {
-				// Check if we already have this avatar cached
-				let cached = await getForumAvatarBlob(forumId);
-				if (cached) {
-					setForumAvatarUrl(URL.createObjectURL(cached));
-					return;
-				}
-
-				// Try to download the avatar from Telegram
-				const downloaded = await downloadForumAvatar(forumId);
-				if (downloaded) {
-					await setForumAvatarBlob(forumId, downloaded);
-					setForumAvatarUrl(URL.createObjectURL(downloaded));
-				} else {
-					setForumAvatarUrl(null);
-				}
-			} catch (e) {
-				console.error(`Failed to load avatar for forum ${forumId}:`, e);
-				setForumAvatarUrl(null);
-			}
-		};
-
-		loadForumAvatar();
-	}, [forumId]);
-
-	// Cleanup Object URL when component unmounts
-	useEffect(() => {
-		return () => {
-			if (forumAvatarUrl) {
-				URL.revokeObjectURL(forumAvatarUrl);
-			}
-		};
-	}, [forumAvatarUrl]);
-	const { data, isLoading, error, refetch } = useQuery({
-		queryKey: ['boards', forumId],
-		queryFn: async () => {
-			const input = getInputPeerForForumId(forumId);
-			const boards = await searchBoardCards(input, 200);
-			boards.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
-			return boards as BoardMeta[];
-		},
-		enabled: Number.isFinite(forumId),
+	const [pending, setPending] = useState(false);
+	const [actionError, setActionError] = useState<string | null>(null);
+	const avatar = useQuery({
+		queryKey: accountQueryKey(scope, 'forum-avatar', forumId),
+		queryFn: () => getForumAvatar(forumId, scope),
+		enabled: Number.isFinite(forumId), staleTime: 60_000, gcTime: 300_000, retry: false,
 	});
+	const forumAvatarUrl = useBlobUrl(avatar.data);
+	const { data, isLoading, error } = useQuery({ ...boardsQueryOptions(scope, forumId), enabled: Number.isFinite(forumId) });
 
-	const { data: lastPostByBoardId = {} } = useQuery<{ [boardId: string]: any }>({
-		queryKey: ['last-post-by-board', forumId, (data ?? []).map((b) => b.id)],
-		queryFn: async () => {
-			const input = getInputPeerForForumId(forumId);
-			const entries = await Promise.all((data ?? []).map(async (b) => {
-				const lp = await getLastPostForBoard(input, b.id);
-				return [b.id, lp] as const;
-			}));
-			return Object.fromEntries(entries);
-		},
-		enabled: Number.isFinite(forumId) && (data ?? []).length > 0,
-		staleTime: 300_000, // 5 minutes - disable automatic polling
-	});
-
-
-
-	async function onCreateBoard() {
+	async function changeBoard(kind: 'create' | 'edit' | 'delete', board?: BoardMeta) {
+		if (pending) return;
+		const operationScope = captureAccountScope();
+		if (kind === 'delete' && !confirm(`Delete board "${board?.title}"? This does not delete child threads or posts.`)) return;
+		const title = kind === 'delete' ? '' : prompt(kind === 'create' ? 'Board title?' : 'New board title?', board?.title)?.trim();
+		if (kind !== 'delete' && !title) return;
+		const description = kind === 'delete' ? '' : prompt('Board description?', board?.description ?? '') ?? '';
+		setPending(true);
+		setActionError(null);
+		let release: (() => void) | undefined;
 		try {
-			const title = prompt('Board title?')?.trim();
-			if (!title) return;
-			const description = prompt('Board description?') ?? '';
-			const id = generateIdHash(16);
-			const text = composeBoardCard(id, { title, description });
+			release = reserveMetadataChange(operationScope);
 			const input = getInputPeerForForumId(forumId);
-			await sendPlainMessage(input, text);
-			await new Promise((r) => setTimeout(r, 500));
-			await refetch();
-		} catch (e: any) {
-			alert(e?.message ?? 'Failed to create board');
-		}
-	}
-
-	async function onEditBoard(b: BoardMeta) {
-		try {
-			const newTitle = prompt('New board title?', b.title)?.trim();
-			if (!newTitle) return;
-			const newDesc = prompt('New board description?', b.description ?? '') ?? '';
-			const input = getInputPeerForForumId(forumId);
-			const newText = composeBoardCard(b.id, { title: newTitle, description: newDesc });
-			const sent: any = await sendPlainMessage(input, newText);
-			const newMsgId: number = Number(sent?.id ?? sent?.message?.id ?? 0);
-			if (newMsgId) {
-				await deleteMessages(input, [b.messageId]);
+			assertAccountScope(operationScope);
+			if (kind === 'delete' && board) {
+				await deleteMessages(input, [board.messageId], operationScope);
+				recordBoardChange(operationScope, forumId, board.id, null);
+			} else if (kind === 'edit' && board) {
+				await editMessage(input, board.messageId, composeBoardCard(board.id, { title: title!, description }), undefined, operationScope);
+				recordBoardChange(operationScope, forumId, board.id, { ...board, title: title!, description });
+			} else {
+				const id = generateIdHash(16);
+				const sent = await sendPlainMessage(input, composeBoardCard(id, { title: title!, description }), undefined, operationScope);
+				assertAccountScope(operationScope);
+				recordBoardChange(operationScope, forumId, id, { id, version: CURRENT_PROTOCOL_VERSION, messageId: Number(sent.id), date: Number(sent.date), title: title!, description });
 			}
-			await new Promise((r) => setTimeout(r, 300));
-			await refetch();
-		} catch (e: any) {
-			alert(e?.message ?? 'Failed to edit board');
+			await invalidateForumQueries(operationScope, forumId);
+		} catch (error) {
+			if (!operationScope.signal.aborted) setActionError(error instanceof Error ? error.message : 'Board update failed');
+		} finally {
+			release?.();
+			if (!operationScope.signal.aborted) setPending(false);
 		}
 	}
 
-	async function onDeleteBoard(b: BoardMeta) {
-		try {
-			if (!confirm(`Delete board "${b.title}"? This does not delete child threads or posts.`)) return;
-			const input = getInputPeerForForumId(forumId);
-			await deleteMessages(input, [b.messageId]);
-			await new Promise((r) => setTimeout(r, 300));
-			await refetch();
-		} catch (e: any) {
-			alert(e?.message ?? 'Failed to delete board');
-		}
+	async function onLoadMore() {
+		setPending(true);
+		setActionError(null);
+		try { await loadMoreBoards(scope, forumId); }
+		catch (error) { if (!scope.signal.aborted) setActionError(error instanceof Error ? error.message : 'Could not load more boards'); }
+		finally { if (!scope.signal.aborted) setPending(false); }
 	}
+
+	const forumTitle = forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`);
 
 	return (
-		<div className="content" style={{ gridTemplateColumns: isSidebarCollapsed ? '16px 1fr' : undefined }}>
+		<div className={`content${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
 			<aside className="sidebar" style={isSidebarCollapsed ? { padding: 0, borderRight: 'none', overflow: 'hidden' } : undefined}>
 				<div className="col" style={isSidebarCollapsed ? { display: 'none' } : undefined}>
 					<ForumList />
@@ -144,85 +93,71 @@ export default function ForumPage() {
 			</aside>
 			<SidebarToggle />
 			<main className="main">
-				<div className="card" style={{ padding: 12 }}>
-					<div className="row" style={{ alignItems: 'center', gap: 12, marginBottom: 16 }}>
-						<div style={{
-							width: 48,
-							height: 48,
-							borderRadius: 24,
-							backgroundColor: 'var(--border)',
-							display: 'flex',
-							alignItems: 'center',
-							justifyContent: 'center',
-							flexShrink: 0,
-							overflow: 'hidden'
-						}}>
+				<nav className="breadcrumbs" aria-label="Breadcrumb">
+					<Link to="/discover">Discover</Link>
+					<span aria-hidden="true">/</span>
+					<span aria-current="page">{forumTitle}</span>
+				</nav>
+				<header className="page-heading">
+					<div className="row" style={{ alignItems: 'center', gap: 16 }}>
+						<div aria-hidden="true" style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--border)', display: 'grid', placeItems: 'center', flexShrink: 0, overflow: 'hidden' }}>
 							{forumAvatarUrl ? (
-								<img
-									src={forumAvatarUrl}
-									alt=""
-									style={{
-										width: '100%',
-										height: '100%',
-										objectFit: 'cover'
-									}}
-								/>
+								<img src={forumAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
 							) : (
-								<div style={{
-									fontSize: 20,
-									color: 'var(--muted)',
-									fontWeight: 'bold'
-								}}>
-									{(forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)).charAt(0).toUpperCase()}
-								</div>
+								<span style={{ fontSize: 22, color: 'var(--muted)', fontWeight: 700 }}>{forumTitle.charAt(0).toUpperCase()}</span>
 							)}
 						</div>
-						<h3 style={{ margin: 0 }}>
-							{forumMeta?.title ?? (forumMeta?.username ? `@${forumMeta.username}` : `Forum ${forumId}`)}
-						</h3>
-					</div>
-					<div className="col">
-						<div className="row" style={{ alignItems: 'center' }}>
-							<h4 style={{ marginTop: 0, marginBottom: 0 }}>Boards</h4>
-							<button className="btn" onClick={onCreateBoard}>+</button>
+						<div style={{ minWidth: 0 }}>
+							<div className="eyebrow">Forum</div>
+							<h1>{forumTitle}</h1>
+							<p className="muted">Find your next conversation in a board below.</p>
 						</div>
-						{isLoading ? (
-							<div>Loading...</div>
-						) : error ? (
-							<div style={{ color: 'var(--danger)' }}>{(error as any)?.message ?? 'Error'}</div>
-						) : (
-							<div className="gallery boards">
-								{(data ?? []).map((b) => (
-									<div key={b.id} className="chiclet" style={{ position: 'relative' }} onClick={() => navigate(`/forum/${forumId}/board/${b.id}`)}>
-										<div className="title">{b.title}</div>
-										{(b.description) && (
-											<div className="desc">{b.description}</div>
-										)}
-										{(() => {
-											const lp: any = (lastPostByBoardId as any)[b.id];
-											if (!lp) return null;
-											const since = formatTimeSince(lp.date);
-											return <div className="sub">Active {since}</div>;
-										})()}
-										<div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
-											<button className="btn ghost" onClick={() => setOpenMenuForBoardId(openMenuForBoardId === b.id ? null : b.id)} title="More">⋯</button>
-											{openMenuForBoardId === b.id && (
-												<div style={{ position: 'absolute', top: 36, right: 0, zIndex: 5 }}>
-													<div className="card" style={{ padding: 8, minWidth: 180 }}>
-														<div className="col" style={{ gap: 6 }}>
-															<button className="btn" onClick={() => { setOpenMenuForBoardId(null); onEditBoard(b); }}>Edit</button>
-															<button className="btn" style={{ background: 'transparent', color: 'var(--danger)' }} onClick={() => { setOpenMenuForBoardId(null); onDeleteBoard(b); }}>Delete</button>
-														</div>
-													</div>
-												</div>
-											)}
-										</div>
-									</div>
-								))}
-							</div>
-						)}
 					</div>
-				</div>
+				</header>
+				<section className="card board-panel" aria-labelledby="boards-heading">
+					<div className="section-heading">
+						<h2 id="boards-heading">Boards</h2>
+						<button className="btn primary" disabled={pending} onClick={() => changeBoard('create')}>New board</button>
+					</div>
+					{actionError && <div className="alert" role="alert">{actionError}</div>}
+					{isLoading ? (
+						<div className="empty-state" role="status">Loading boards from this forum…</div>
+					) : error ? (
+						<div className="alert" role="alert">
+							<strong>Could not load boards</strong>
+							<p>{error.message || 'Please try opening this forum again.'}</p>
+						</div>
+					) : !(data?.items ?? []).length ? (
+						<div className="empty-state">
+							<h3>No boards yet</h3>
+							<p>Create the first board to give this forum a place to gather.</p>
+						</div>
+					) : (
+						<div className="gallery boards">
+							{(data?.items ?? []).map((b) => (
+								<div key={b.id} className="chiclet">
+									<Link className="discussion-link" to={`/forum/${forumId}/board/${b.id}`}>
+										<div className="title">{b.title}</div>
+										{b.description && <div className="desc">{b.description}</div>}
+										<CachedBoardActivity scope={scope} forumId={forumId} boardId={b.id} />
+									</Link>
+									<div style={{ position: 'relative', flexShrink: 0 }}>
+										<button className="btn ghost" onClick={() => setOpenMenuForBoardId(openMenuForBoardId === b.id ? null : b.id)} aria-label={`More options for ${b.title}`} aria-expanded={openMenuForBoardId === b.id}>More</button>
+										{openMenuForBoardId === b.id && (
+											<div className="card" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 5, padding: 8, minWidth: 160 }}>
+												<div className="col" style={{ gap: 6 }}>
+													<button className="btn" disabled={pending} onClick={() => { setOpenMenuForBoardId(null); changeBoard('edit', b); }}>Edit board</button>
+													<button className="btn ghost" disabled={pending} style={{ color: 'var(--danger)' }} onClick={() => { setOpenMenuForBoardId(null); changeBoard('delete', b); }}>Delete board</button>
+												</div>
+											</div>
+										)}
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+					{data && !data.complete && <div className="row"><span className="muted">More boards may be available.</span><button className="btn" disabled={pending} onClick={onLoadMore}>Load more boards</button></div>}
+				</section>
 			</main>
 		</div>
 	);

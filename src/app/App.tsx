@@ -1,11 +1,7 @@
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import LoginPage from '@features/auth/LoginPage';
-import DiscoverPage from '@features/catalog/DiscoverPage';
-import ForumPage from '@features/forum/ForumPage';
-import SettingsPage from '@features/settings/SettingsPage';
 import { useSessionStore } from '@state/session';
-import BoardPage from '@features/forum/BoardPage';
-import { useEffect } from 'react';
+import { Component, lazy, Suspense, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSettingsStore } from '@state/settings';
 import { getInputPeerForForumId } from '@lib/telegram/peers';
@@ -67,21 +63,39 @@ function PaginatedBoardPage() {
 	return <BoardPage />;
 }
 
+// Route splitting deliberately keeps Telegram/media/Markdown off the auth shell.
+const LoginPage = lazy(() => import('@features/auth/LoginPage'));
+const DiscoverPage = lazy(() => import('@features/catalog/DiscoverPage'));
+const ForumPage = lazy(() => import('@features/forum/ForumPage'));
+const BoardPage = lazy(() => import('@features/forum/BoardPage'));
+const SettingsPage = lazy(() => import('@features/settings/SettingsPage'));
+
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+	state = { failed: false };
+	static getDerivedStateFromError() { return { failed: true }; }
+	render() {
+		return this.state.failed ? <main className="main"><div className="card"><h2>This page could not load.</h2><p>Check your connection and reload to try again.</p><button className="btn primary" onClick={() => window.location.reload()}>Reload page</button></div></main> : this.props.children;
+	}
+}
+
 function Header() {
 	const navigate = useNavigate();
 	const { isAuthenticated, logout } = useSessionStore();
 	return (
 		<header className="app-header">
-			<div className="brand">
-				<img src="/icon.svg" alt="ForumGram" />
-				<Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>ForumGram</Link>
-			</div>
-			<nav className="header-actions">
-				<NavLink to="/settings" className="btn ghost" title="Settings" aria-label="Settings">⚙️</NavLink>
+			<Link className="brand" to="/" aria-label="ForumGram home">
+				<img src="/icon.svg" alt="" />
+				<span>Forum<span className="brand-accent">Gram</span></span>
+			</Link>
+			<nav className="header-actions" aria-label="Main navigation">
 				{isAuthenticated ? (
-					<button className="btn" onClick={() => { logout(); navigate('/login'); }}>Log out</button>
+					<>
+						<NavLink to="/discover" className="nav-link">Discover</NavLink>
+						<NavLink to="/settings" className="nav-link">Settings</NavLink>
+						<button className="btn ghost" onClick={() => { logout(); navigate('/login'); }}>Log out</button>
+					</>
 				) : (
-					<NavLink to="/login" className="btn primary">Log in</NavLink>
+					<span className="header-caption">A quieter place for conversation</span>
 				)}
 			</nav>
 		</header>
@@ -89,8 +103,9 @@ function Header() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-	const { isAuthenticated } = useSessionStore();
+	const { isAuthenticated, isBootstrapping } = useSessionStore();
 	const location = useLocation();
+	if (isBootstrapping) return <main className="main" role="status">Verifying your Telegram session…</main>;
 	if (!isAuthenticated) {
 		return <LoginPage redirectTo={location.pathname} />;
 	}
@@ -99,12 +114,17 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export default function App() {
 	const theme = useSettingsStore((s) => s.theme);
+	const { pathname } = useLocation();
+	const user = useSessionStore((s) => s.user);
+	useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
 	useEffect(() => {
 		try { document.documentElement.setAttribute('data-theme', theme); } catch {}
 	}, [theme]);
 	return (
 		<div className="app-shell">
 			<Header />
+			<RouteErrorBoundary key={`${user?.id ?? 'signed-out'}:${pathname}`}>
+			<Suspense fallback={<main className="main" role="status">Loading…</main>}>
 			<Routes>
 				<Route path="/login" element={<LoginPage />} />
 				<Route path="/discover" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
@@ -115,6 +135,8 @@ export default function App() {
 				<Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
 				<Route path="*" element={<RequireAuth><DiscoverPage /></RequireAuth>} />
 			</Routes>
+			</Suspense>
+			</RouteErrorBoundary>
 		</div>
 	);
 }

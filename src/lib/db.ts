@@ -1,83 +1,80 @@
-import Dexie, { Table } from 'dexie';
+import Dexie, { type Table } from 'dexie';
 
-export interface ForumRow { id: number; accessHash?: string; username?: string; title: string; isForum: boolean; isPublic: boolean; about?: string; members?: number; lastActivity?: number; addedAt: number; }
-export interface TopicRow { id: number; forumId: number; title: string; lastMsgId?: number; unreadCount?: number; pinned?: boolean; }
-export interface MessageRow { id: number; forumId: number; topicId: number; fromId: number; date: number; textMD: string; threadTag?: string | null; threadId?: string | null; edited?: boolean; }
-export interface KvRow { key: string; value: string; }
-export interface AvatarRow { userId: number; blob: Blob; updatedAt: number; }
+export interface ResourceRow {
+	key: string;
+	accountId: string;
+	reference: string;
+	revision: string;
+	blob: Blob | null;
+	bytes: number;
+	validatedAt: number;
+	accessedAt: number;
+}
+interface EpochRow { accountId: string; value: number }
 
-export class FGDB extends Dexie {
-	forums!: Table<ForumRow, number>;
-	topics!: Table<TopicRow, [number, number]>; // [forumId+id]
-	messages!: Table<MessageRow, [number, number, number]>; // [forumId+topicId+id]
-	kv!: Table<KvRow, string>;
-	avatars!: Table<AvatarRow, number>;
-
-	constructor() {
-		super('forumgram');
-		this.version(1).stores({
-			forums: '++id, username, addedAt',
-			topics: '[forumId+id], forumId',
-			messages: '[topicId+id], topicId, date',
-			kv: 'key',
-		});
-		this.version(2).stores({
-			forums: '++id, username, addedAt',
-			topics: '[forumId+id], forumId',
-			messages: '[topicId+id], topicId, date',
-			kv: 'key',
-			avatars: 'userId',
-		});
-		this.version(3).stores({
-			forums: '++id, username, addedAt',
-			topics: '[forumId+id], forumId',
-			messages: '[forumId+topicId+id], forumId, topicId, date, fromId, [forumId+fromId]',
-			kv: 'key',
-			avatars: 'userId',
-		});
+// The old database only held disposable caches. Never open its broken v1/v2
+// primary-key upgrade, and never assign its unowned rows to a signed-in account.
+export class ResourceDB extends Dexie {
+	resources!: Table<ResourceRow, string>;
+	epochs!: Table<EpochRow, string>;
+	constructor(name = 'forumgram-resources-v1') {
+		super(name);
+		this.version(1).stores({ resources: 'key, accountId, [accountId+reference], accessedAt', epochs: 'accountId' });
 	}
 }
+export const resourceDB = new ResourceDB();
+export const DISK_MAX_BYTES = 128 * 1024 * 1024;
+export const DISK_MAX_COUNT = 512;
+export const DISK_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
-export const db = new FGDB();
-
-export async function kvSet(key: string, value: string) {
-	await db.kv.put({ key, value });
+export function discardLegacyDatabase(): Promise<void> {
+	// Request deletion without ever opening the incompatible legacy schema.
+	// Another old tab can block it; report that instead of hanging Clear forever.
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.deleteDatabase('forumgram');
+		const timeout = setTimeout(() => reject(new Error('Close older ForumGram tabs to finish discarding the legacy cache.')), 2000);
+		request.onsuccess = () => { clearTimeout(timeout); resolve(); };
+		request.onerror = () => { clearTimeout(timeout); reject(request.error); };
+		request.onblocked = () => { clearTimeout(timeout); reject(new Error('An older tab is blocking legacy cache deletion.')); };
+	});
 }
-
-export async function kvGet(key: string): Promise<string | null> {
-	const row = await db.kv.get(key);
-	return row?.value ?? null;
+export async function readCacheEpoch(accountId: string): Promise<number> {
+	return (await resourceDB.epochs.get(accountId))?.value ?? 0;
 }
-
-export async function getAvatarBlob(userId: number): Promise<Blob | null> {
-	const row = await db.avatars.get(userId);
-	return row?.blob ?? null;
+export async function readResource(accountId: string, reference: string): Promise<ResourceRow | undefined> {
+	return resourceDB.resources.where('[accountId+reference]').equals([accountId, reference]).first();
 }
-
-export async function setAvatarBlob(userId: number, blob: Blob): Promise<void> {
-	await db.avatars.put({ userId, blob, updatedAt: Date.now() });
+export async function writeResource(row: ResourceRow, expectedEpoch: number): Promise<boolean> {
+	if (row.bytes > DISK_MAX_BYTES) return false;
+	return resourceDB.transaction('rw', resourceDB.resources, resourceDB.epochs, async () => {
+		if (await readCacheEpoch(row.accountId) !== expectedEpoch) return false;
+		await resourceDB.resources.where('[accountId+reference]').equals([row.accountId, row.reference]).delete();
+		await resourceDB.resources.put(row);
+		const rows = await resourceDB.resources.orderBy('accessedAt').toArray();
+		let bytes = rows.reduce((sum, item) => sum + item.bytes, 0);
+		let count = rows.length;
+		const remove: string[] = [];
+		for (const item of rows) {
+			if (item.accessedAt < Date.now() - DISK_MAX_AGE || bytes > DISK_MAX_BYTES || count > DISK_MAX_COUNT) {
+				remove.push(item.key);
+				bytes -= item.bytes;
+				count--;
+			}
+		}
+		await resourceDB.resources.bulkDelete(remove);
+		return true;
+	});
 }
-
-export async function getForumAvatarBlob(forumId: number): Promise<Blob | null> {
-	// Use negative IDs to distinguish forum avatars from user avatars.
-	const avatarId = -Math.abs(forumId);
-	const row = await db.avatars.get(avatarId);
-	return row?.blob ?? null;
+export async function purgeResources(accountId: string): Promise<void> {
+	// IndexedDB serializes this transaction with every writer in every tab. A
+	// queued writer either finishes before deletion or fails the epoch check.
+	await resourceDB.transaction('rw', resourceDB.resources, resourceDB.epochs, async () => {
+		const value = await readCacheEpoch(accountId);
+		await resourceDB.epochs.put({ accountId, value: value + 1 });
+		await resourceDB.resources.where('accountId').equals(accountId).delete();
+	});
 }
-
-export async function setForumAvatarBlob(forumId: number, blob: Blob): Promise<void> {
-	// Use negative IDs to distinguish forum avatars from user avatars.
-	const avatarId = -Math.abs(forumId);
-	await db.avatars.put({ userId: avatarId, blob, updatedAt: Date.now() });
-}
-
-export async function getActivityCount(forumId: number, userId: number): Promise<number | null> {
-	const key = `act:${forumId}:${userId}`;
-	const v = await kvGet(key);
-	return v ? Number(v) : null;
-}
-
-export async function setActivityCount(forumId: number, userId: number, count: number): Promise<void> {
-	const key = `act:${forumId}:${userId}`;
-	await kvSet(key, String(count));
+export async function resourceUsage(accountId: string): Promise<{ totalSize: number; fileCount: number }> {
+	const rows = await resourceDB.resources.where('accountId').equals(accountId).toArray();
+	return { totalSize: rows.reduce((n, row) => n + row.bytes, 0), fileCount: rows.filter(row => row.blob !== null).length };
 }

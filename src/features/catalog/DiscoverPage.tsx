@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import { joinInviteLink } from '@lib/telegram/client';
+import { useEffect, useRef, useState } from 'react';
+import { joinInviteLink, joinPublicByUsername } from '@lib/telegram/client';
+import { Api } from 'telegram';
+import { assertAccountScope, captureAccountScope } from '@lib/accountScope';
 import { useForumsStore } from '@state/forums';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ForumList from '@components/ForumList';
@@ -12,13 +14,13 @@ export default function DiscoverPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const addOrUpdateForum = useForumsStore((s) => s.addOrUpdateForum);
-	const initForums = useForumsStore((s) => s.initFromStorage);
 	const navigate = useNavigate();
 	const [searchParams] = useSearchParams();
 	const addMode = searchParams.get('add') === '1';
 	const { isSidebarCollapsed } = useUiStore();
 
-	useEffect(() => { initForums(); }, [initForums]);
+	const mounted = useRef(false);
+	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
 	function classifyInput(input: string): { kind: 'invite'|'username'; value: string } {
 		const s = input.trim();
@@ -42,93 +44,61 @@ export default function DiscoverPage() {
 		return { kind: 'username', value: s };
 	}
 
-	async function onJoin() {
+	async function join(address: string) {
+		const scope = captureAccountScope();
 		try {
-			setLoading(true);
-			setError(null);
-			const inputVal = query.trim();
-			const kind = classifyInput(inputVal);
-			if (kind.kind === 'username') {
-				const { joinPublicByUsername } = await import('@lib/telegram/client');
-				const ch: any = await joinPublicByUsername(kind.value);
-				const id = Number(ch.id);
-				const title = ch.title || ch.username || `Forum ${id}`;
-				const username = ch.username;
-				const accessHash = ch.accessHash ?? ch.access_hash;
-				addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(ch.forum), isPublic: Boolean(username) });
-				navigate(`/forum/${id}`);
-			} else {
-				const updates: any = await joinInviteLink(inputVal);
-				const channel = (updates?.chats ?? []).find((c: any) => c.className === 'Channel' || c._ === 'channel' || c._ === 'Channel');
-				const chat = (updates?.chats ?? []).find((c: any) => c.className === 'Chat' || c._ === 'chat');
-				const entity: any = channel || chat || updates?.chat || null;
-				if (!entity) throw new Error('Joined, but no chat found in response');
-				const id = Number(entity.id);
-				const title = entity.title || entity.username || `Forum ${id}`;
-				const username = entity.username;
-				const accessHash = entity.accessHash ?? entity.access_hash;
-				addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(entity.forum), isPublic: Boolean(username) });
-				navigate(`/forum/${id}`);
+			setLoading(true); setError(null);
+			const kind = classifyInput(address.trim());
+			let entity: Api.Channel | Api.Chat | undefined;
+			if (kind.kind === 'username') entity = await joinPublicByUsername(kind.value, scope);
+			else {
+				const updates = await joinInviteLink(kind.value, scope);
+				if ('chats' in updates) entity = updates.chats.find((chat): chat is Api.Channel | Api.Chat => chat instanceof Api.Channel || chat instanceof Api.Chat);
 			}
-		} catch (e: any) {
-			setError(e?.message ?? 'Failed to join forum');
+			assertAccountScope(scope);
+			if (!entity) throw new Error('Joined, but Telegram returned no accessible chat.');
+			const id = Number(entity.id);
+			const username = entity instanceof Api.Channel ? entity.username : undefined;
+			addOrUpdateForum({ id, title: entity.title || username || `Forum ${id}`, username, accessHash: entity instanceof Api.Channel ? entity.accessHash?.toString() : undefined, isForum: entity instanceof Api.Channel && Boolean(entity.forum), isPublic: Boolean(username) }, scope);
+			if (mounted.current) navigate(`/forum/${id}`);
+		} catch (error) {
+			if (!scope.signal.aborted && mounted.current) setError(error instanceof Error ? error.message : 'Failed to join forum');
 		} finally {
-			setLoading(false);
+			if (!scope.signal.aborted && mounted.current) setLoading(false);
 		}
 	}
-
-	async function onSelectFeatured(address: string) {
-		try {
-			setError(null);
-			setLoading(true);
-			const handle = address.startsWith('@') ? address.slice(1) : address;
-			const { joinPublicByUsername } = await import('@lib/telegram/client');
-			const ch: any = await joinPublicByUsername(handle);
-			const id = Number(ch.id);
-			const title = ch.title || ch.username || `Forum ${id}`;
-			const username = ch.username;
-			const accessHash = ch.accessHash ?? ch.access_hash;
-			addOrUpdateForum({ id, title, username, accessHash, isForum: Boolean(ch.forum), isPublic: Boolean(username) });
-			navigate(`/forum/${id}`);
-		} catch (e: any) {
-			setError(e?.message ?? 'Failed to open featured forum');
-		} finally {
-			setLoading(false);
-		}
-	}
+	const onJoin = () => join(query);
+	const onSelectFeatured = (address: string) => join(address);
 
 	return (
-		<div className="content" style={{ gridTemplateColumns: isSidebarCollapsed ? '16px 1fr' : undefined }}>
+		<div className={`content${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
 			<aside className="sidebar" style={isSidebarCollapsed ? { padding: 0, borderRight: 'none', overflow: 'hidden' } : undefined}>
 				<div className="col" style={isSidebarCollapsed ? { display: 'none' } : undefined}>
 					<ForumList />
 				</div>
 			</aside>
 			<SidebarToggle />
-			<main className="main">
-				{addMode ? (
-					<div className="col">
-						<div className="card" style={{ padding: 12 }}>
-							<h3>Join a forum</h3>
-							<div className="field">
-								<label className="label">Forum handle or invite</label>
-								<div className="form-row">
-									<input className="input" placeholder="@my_forum or https://t.me/+hash" value={query} onChange={(e) => setQuery(e.target.value)} />
-									<button className="btn primary" onClick={onJoin} disabled={!query || loading}>Join</button>
-								</div>
-							</div>
-							{error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
+			<main className="main discover-page">
+				<header className="page-heading">
+					<p className="eyebrow">YOUR COMMUNITY WORKSPACE</p>
+					<h1>{addMode ? 'Find your people.' : 'Welcome back.'}</h1>
+					<p>{addMode ? 'Bring a Telegram community into a more focused space.' : 'Pick up a conversation, explore a community, or make room for a new one.'}</p>
+				</header>
+				<section className="card join-card" aria-labelledby="join-title">
+					<div><span className="eyebrow">CONNECT A COMMUNITY</span><h2 id="join-title">Join a forum</h2><p className="muted">Have an invite? Your next conversation starts here.</p></div>
+					<form className="field" onSubmit={(event) => { event.preventDefault(); if (!loading && query.trim()) void onJoin(); }}>
+						<label className="label" htmlFor="forum-address">Telegram handle or invite link</label>
+						<div className="form-row">
+							<input id="forum-address" className="input" placeholder="@community or https://t.me/+invite" value={query} onChange={(e) => setQuery(e.target.value)} required />
+							<button className="btn primary" type="submit" disabled={!query.trim() || loading}>{loading ? 'Joining…' : 'Join forum'}</button>
 						</div>
-						<div className="card" style={{ padding: 12 }}>
-							<FeaturedForums onSelect={onSelectFeatured} />
-						</div>
-					</div>
-				) : (
-					<div className="card" style={{ padding: 12 }}>
-						<h3>Welcome</h3>
-						<p>Select a forum from the left, or click + to join a forum.</p>
-					</div>
-				)}
+					</form>
+					{error && <div className="alert" role="alert">{error}</div>}
+				</section>
+				<section className="discover-featured" aria-label="Featured communities">
+					<FeaturedForums onSelect={onSelectFeatured} />
+				</section>
+				<div className="workspace-note"><span className="note-mark" aria-hidden="true">↳</span><p><strong>A home for longer conversations.</strong><br />Open a forum to browse its boards and follow individual discussion threads.</p></div>
 			</main>
 		</div>
 	);
