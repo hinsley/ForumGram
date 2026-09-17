@@ -108,9 +108,7 @@ export default function ForumPage() {
 							)}
 						</div>
 						<div style={{ minWidth: 0 }}>
-							<div className="eyebrow">Forum</div>
 							<h1>{forumTitle}</h1>
-							<p className="muted">Find your next conversation in a board below.</p>
 						</div>
 					</div>
 				</header>
@@ -121,17 +119,14 @@ export default function ForumPage() {
 					</div>
 					{actionError && <div className="alert" role="alert">{actionError}</div>}
 					{isLoading ? (
-						<div className="empty-state" role="status">Loading boards from this forum…</div>
+						<div className="empty-state" role="status">Loading boards…</div>
 					) : error ? (
 						<div className="alert" role="alert">
 							<strong>Could not load boards</strong>
 							<p>{error.message || 'Please try opening this forum again.'}</p>
 						</div>
 					) : !(data?.items ?? []).length ? (
-						<div className="empty-state">
-							<h3>No boards yet</h3>
-							<p>Create the first board to give this forum a place to gather.</p>
-						</div>
+						<div className="empty-state"><p>No boards yet</p></div>
 					) : (
 						<div className="gallery boards">
 							{(data?.items ?? []).map((b) => (

@@ -80,17 +80,14 @@ export default function DiscoverPage() {
 			<SidebarToggle />
 			<main className="main discover-page">
 				<header className="page-heading">
-					<p className="eyebrow">YOUR COMMUNITY WORKSPACE</p>
-					<h1>{addMode ? 'Find your people.' : 'Welcome back.'}</h1>
-					<p>{addMode ? 'Bring a Telegram community into a more focused space.' : 'Pick up a conversation, explore a community, or make room for a new one.'}</p>
+					<h1>{addMode ? 'Join a forum' : 'Your forums'}</h1>
 				</header>
 				<section className="card join-card" aria-labelledby="join-title">
-					<div><span className="eyebrow">CONNECT A COMMUNITY</span><h2 id="join-title">Join a forum</h2><p className="muted">Have an invite? Your next conversation starts here.</p></div>
 					<form className="field" onSubmit={(event) => { event.preventDefault(); if (!loading && query.trim()) void onJoin(); }}>
 						<label className="label" htmlFor="forum-address">Telegram handle or invite link</label>
 						<div className="form-row">
 							<input id="forum-address" className="input" placeholder="@community or https://t.me/+invite" value={query} onChange={(e) => setQuery(e.target.value)} required />
-							<button className="btn primary" type="submit" disabled={!query.trim() || loading}>{loading ? 'Joining…' : 'Join forum'}</button>
+							<button className="btn primary" type="submit" disabled={!query.trim() || loading}>{loading ? 'Joining…' : 'Join'}</button>
 						</div>
 					</form>
 					{error && <div className="alert" role="alert">{error}</div>}
@@ -98,7 +95,6 @@ export default function DiscoverPage() {
 				<section className="discover-featured" aria-label="Featured communities">
 					<FeaturedForums onSelect={onSelectFeatured} />
 				</section>
-				<div className="workspace-note"><span className="note-mark" aria-hidden="true">↳</span><p><strong>A home for longer conversations.</strong><br />Open a forum to browse its boards and follow individual discussion threads.</p></div>
 			</main>
 		</div>
 	);

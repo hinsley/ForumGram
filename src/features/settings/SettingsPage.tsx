@@ -58,13 +58,11 @@ export default function SettingsPage() {
 			<main className="main">
 				<div className="settings-page">
 					<header className="page-heading">
-						<div className="eyebrow">Preferences</div>
 						<h1>Settings</h1>
-						<p>Tune how posts render, pick a theme, and manage the media this app caches on your device.</p>
 					</header>
 
 					<section className="card settings-card" aria-labelledby="settings-reading-heading">
-						<h2 className="section-heading" id="settings-reading-heading">Reading &amp; appearance</h2>
+						<h2 className="section-heading" id="settings-reading-heading">Reading</h2>
 						<div className="col">
 							<label className="row" htmlFor="settings-markdown">
 								<input id="settings-markdown" type="checkbox" checked={markdownEnabled} onChange={(e) => setMarkdown(e.target.checked)} />
@@ -130,10 +128,6 @@ export default function SettingsPage() {
 								</p>
 							) : (
 								<>
-									<p className="label" style={{ color: 'var(--muted)', margin: 0 }}>
-									Clearing removes this account’s cached media and avatars, including live image URLs in other open tabs.
-									It keeps your session, forum list, preferences, posts and offline app shell. Legacy unowned ForumGram image caches are also discarded.
-									</p>
 									<div className="field">
 										<span className="label" id="settings-opfs-usage-label">Cached media storage</span>
 										<div className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -149,9 +143,6 @@ export default function SettingsPage() {
 															)}
 														</>
 													)}
-												</div>
-												<div className="label" style={{ color: 'var(--muted)' }}>
-												Cached media and avatars for this account
 												</div>
 											</div>
 											<button

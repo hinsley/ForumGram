@@ -177,10 +177,11 @@ export async function getMediaBlob(forumId: number, messageId: number, scope = c
 		return { blob, revision };
 	});
 }
-async function getAvatar(kind: 'forum' | 'user', id: number, scope: AccountScope): Promise<Blob | null> {
+async function getAvatar(kind: 'forum' | 'user' | 'handle', id: number | string, scope: AccountScope): Promise<Blob | null> {
 	return getResource(scope, JSON.stringify(['avatar', kind, id]), AVATAR_TTL, async (previous, check) => {
 		const client = await getClient(scope);
-		const entity = await runRead(scope, () => client.getEntity(kind === 'forum' ? getInputPeerForForumId(id) : id));
+		const target = kind === 'forum' ? getInputPeerForForumId(id as number) : id;
+		const entity = await runRead(scope, () => client.getEntity(target));
 		assertAccountScope(scope);
 		check();
 		const photo = 'photo' in entity ? entity.photo : undefined;
@@ -194,6 +195,8 @@ async function getAvatar(kind: 'forum' | 'user', id: number, scope: AccountScope
 }
 export function getForumAvatar(forumId: number, scope = captureAccountScope()): Promise<Blob | null> { return getAvatar('forum', forumId, scope); }
 export function getUserAvatar(userId: number, scope = captureAccountScope()): Promise<Blob | null> { return getAvatar('user', userId, scope); }
+/** Avatars by @username; works before joining, so the directory can show real photos. */
+export function getForumAvatarByUsername(username: string, scope = captureAccountScope()): Promise<Blob | null> { return getAvatar('handle', username.replace(/^@/, ''), scope); }
 
 export function useBlobUrl(blob: Blob | null | undefined): string | undefined {
 	const [owned, setOwned] = useState<{ blob: Blob; url: string }>();
@@ -224,4 +227,17 @@ export function useForumAvatarUrl(forumId: number | undefined): string | undefin
 		return () => { active = false; };
 	}, [forumId]);
 	return useBlobUrl(result?.id === forumId ? result?.blob : undefined);
+}
+
+export function useForumAvatarByUsername(username: string | undefined): string | undefined {
+	const [result, setResult] = useState<{ username: string; blob: Blob | null }>();
+	useEffect(() => {
+		if (!username) return;
+		let active = true;
+		let scope: AccountScope;
+		try { scope = captureAccountScope(); } catch { return; }
+		getForumAvatarByUsername(username, scope).then(blob => { assertAccountScope(scope); if (active) setResult({ username, blob }); }).catch(() => { if (active) setResult(undefined); });
+		return () => { active = false; };
+	}, [username]);
+	return useBlobUrl(result?.username === username ? result?.blob : undefined);
 }

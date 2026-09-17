@@ -88,14 +88,12 @@ function Header() {
 				<span>Forum<span className="brand-accent">Gram</span></span>
 			</Link>
 			<nav className="header-actions" aria-label="Main navigation">
-				{isAuthenticated ? (
+				{isAuthenticated && (
 					<>
 						<NavLink to="/discover" className="nav-link">Discover</NavLink>
 						<NavLink to="/settings" className="nav-link">Settings</NavLink>
 						<button className="btn ghost" onClick={() => { logout(); navigate('/login'); }}>Log out</button>
 					</>
-				) : (
-					<span className="header-caption">A quieter place for conversation</span>
 				)}
 			</nav>
 		</header>

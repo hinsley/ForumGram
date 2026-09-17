@@ -203,9 +203,6 @@ h3 { font-size: 18px; }
 .list-item:hover { background: var(--list-item-hover-bg); }
 .title { font-weight: 650; }
 .forum-navigation { display: flex; flex-direction: column; min-height: calc(100dvh - 120px); }
-.sidebar-home { display: flex; gap: 12px; color: var(--muted); padding: 12px; margin-bottom: 30px; border-radius: 8px; font-weight: 600; }
-.sidebar-home.active, .sidebar-home:hover { background: var(--btn-bg-hover); color: var(--text); text-decoration: none; }
-.sidebar-home > span { font-size: 20px; line-height: 1; }
 .forum-navigation .section-heading { padding-left: 12px; margin-bottom: 12px; }
 .forum-navigation .eyebrow { color: var(--muted); }
 .forum-nav-item { position: relative; display: flex; align-items: center; border-radius: 10px; border: 1px solid transparent; }
@@ -220,8 +217,6 @@ h3 { font-size: 18px; }
 .forum-menu-button { padding: 4px; min-width: 28px; }
 .forum-menu { position: absolute; right: 0; top: 58px; z-index: 10; padding: 8px; box-shadow: var(--shadow); }
 .sidebar-empty { padding: 12px; font-size: 13px; }
-.sidebar-footer { margin-top: auto; padding: 40px 12px 0; font-size: 12px; color: var(--muted); }
-.sidebar-footer p { margin: 6px 0 0; }
 .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px; }
 .chiclet { min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--chiclet-bg); color: var(--text); text-align: left; }
 .chiclet:hover { background: var(--chiclet-hover-bg); }
@@ -229,7 +224,6 @@ h3 { font-size: 18px; }
 .chiclet .desc { color: var(--muted); }
 .featured-card { cursor: pointer; min-height: 230px; }
 .featured-card p { color: var(--muted); font-size: 13px; }
-.featured-action { display: flex; justify-content: space-between; width: 100%; padding-top: 18px; margin-top: auto; color: var(--accent); font-size: 12px; font-weight: 600; }
 .gallery.boards { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .gallery.boards .chiclet { flex-direction: row; align-items: flex-start; gap: 16px; padding: 18px 20px; }
 .discussion-link { display: block; flex: 1; min-width: 0; color: inherit; }
@@ -248,25 +242,14 @@ input[type="checkbox"] { accent-color: var(--accent); width: 17px; height: 17px;
 .join-card p { margin-bottom: 0; }
 .discover-page { max-width: 1450px; width: 100%; }
 .discover-featured { margin-top: 40px; }
-.workspace-note { display: flex; gap: 18px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 36px; }
-.workspace-note p { margin: 0; }
-.workspace-note strong { font-weight: 600; color: var(--text); }
-.note-mark { font-size: 30px; color: var(--accent); }
 .login-layout { min-height: calc(100dvh - 72px); max-width: 1240px; margin: auto; display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; gap: clamp(40px, 7vw, 110px); padding: 64px 48px; }
 .login-intro h1 { font-size: clamp(36px, 4vw, 54px); letter-spacing: -2px; line-height: 1.12; margin: 22px 0; }
 .lead { color: var(--muted); font-size: 16px; max-width: 440px; line-height: 1.8; }
-.intro-features { margin-top: 40px; display: grid; gap: 24px; }
-.intro-features > div { display: flex; gap: 18px; align-items: flex-start; }
-.feature-number { font-size: 10px; color: var(--accent); background: var(--badge-bg); border: 1px solid var(--border); padding: 7px 9px; border-radius: 8px; font-family: monospace; }
-.intro-features h3 { font-size: 14px; letter-spacing: 0; margin: 0 0 4px; }
-.intro-features p { font-size: 12px; color: var(--muted); margin: 0; }
 .login-card { padding: 36px; box-shadow: 0 24px 80px #00000018; }
-.login-mark { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--border); background: var(--badge-bg); color: var(--accent); border-radius: 14px; font-weight: 750; margin-bottom: 30px; }
 .login-card h2 { font-size: 26px; }
 .login-card > .muted { font-size: 13px; }
 .login-form { margin-top: 28px; gap: 18px; }
 .login-form .btn { justify-content: space-between; padding: 13px 16px; }
-.login-note { color: var(--muted); font-size: 11px; margin: 26px 0 0; padding-top: 22px; border-top: 1px solid var(--border); }
 .settings-page { max-width: 960px; width: 100%; margin: 0 auto; }
 .settings-card { padding: 28px; margin-bottom: 20px; }
 .settings-card .col { gap: 22px; }
@@ -324,8 +307,6 @@ input[type="checkbox"] { accent-color: var(--accent); width: 17px; height: 17px;
 	.sidebar { position: relative; top: 0; width: 100%; height: auto; max-height: 45dvh; border-right: 0; border-bottom: 1px solid var(--border); padding: 16px; }
 	.sidebar-collapsed .sidebar { display: none; }
 	.forum-navigation { min-height: 0; }
-	.sidebar-home { margin-bottom: 12px; }
-	.sidebar-footer { display: none; }
 	.sidebar-toggle, .sidebar-collapsed .sidebar-toggle { position: absolute; top: 10px; left: 18px; width: auto; min-height: 30px; padding: 2px 12px; border-radius: 6px; font-size: 13px; }
 	.sidebar-toggle-label { display: inline; }
 	.main { padding: 24px 18px 40px; }
@@ -336,9 +317,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 17px; height: 17px;
 	.login-layout { min-height: calc(100dvh - 64px); grid-template-columns: minmax(0, 1fr); padding: 32px 22px; gap: 32px; }
 	.login-intro h1 { font-size: 38px; }
 	.login-intro .lead { font-size: 14px; margin-bottom: 0; }
-	.intro-features { display: none; }
 	.login-card { padding: 26px; }
-	.login-mark { display: none; }
 	.login-card h2 { font-size: 23px; }
 	.composer { grid-template-columns: minmax(0, 1fr); }
 	.composer > .col { flex-direction: row !important; flex-wrap: wrap; }
